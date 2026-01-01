@@ -26,8 +26,8 @@ public sealed class EncounterDef
         Enemies = enemies;
         Loot = new[]
             {
-                new LootDrop("gel", 65, 1, 2),
-                new LootDrop("herb", 25, 1, 1),
+                new LootDrop("herb", 65, 1, 2),
+                new LootDrop("gel", 25, 1, 1),
                 new LootDrop("ring_tin", 8, 1, 1),
             };
     }

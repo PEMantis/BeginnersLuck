@@ -101,7 +101,7 @@ public static class MenuRenderer
         }
     }
 
-    private static void DrawOutline(SpriteBatch sb, Texture2D white, Rectangle r, int t, Color c)
+    public static void DrawOutline(SpriteBatch sb, Texture2D white, Rectangle r, int t, Color c)
     {
         sb.Draw(white, new Rectangle(r.X, r.Y, r.Width, t), c);
         sb.Draw(white, new Rectangle(r.X, r.Bottom - t, r.Width, t), c);

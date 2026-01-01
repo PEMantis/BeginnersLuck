@@ -1,3 +1,5 @@
+using System;
+
 namespace BeginnersLuck.Game.State;
 
 public sealed class PlayerState
@@ -19,4 +21,13 @@ public sealed class PlayerState
     {
         this.Gold += gold;
     }
+    public void Heal(int amount)
+    {
+        Hp = Math.Min(MaxHp, Hp + amount);
+    }
+    public void Damage(int amount)
+    {
+        Hp = Math.Max(0, Hp - amount);
+    }
+
 }

@@ -133,7 +133,7 @@ public sealed class WorldMapScene : SceneBase
         // Pause (Esc/Start/Back)
         if (Pressed(ks, Keys.Escape) || Pressed(pad, Buttons.Start) || Pressed(pad, Buttons.Back))
         {
-            _s.Scenes.Push(new PauseScene(_s, ks, pad));
+            _s.Scenes.Push(new PauseScene(_s));
             _prevKs = ks;
             _prevPad = pad;
             return;

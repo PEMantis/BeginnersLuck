@@ -8,6 +8,15 @@ public sealed class PlayerInventory
 
     public bool TryGetCount(string id, out int qty) => Counts.TryGetValue(id, out qty);
 
+    public int CountOf(string id)
+        => (id != null && Counts.TryGetValue(id, out var qty)) ? qty : 0;
+
+    public IEnumerable<(string Id, int Qty)> Enumerate()
+    {
+        foreach (var kv in Counts)
+            yield return (kv.Key, kv.Value);
+    }
+
     public void Add(string id, int delta)
     {
         if (string.IsNullOrWhiteSpace(id)) return;
@@ -17,5 +26,17 @@ public sealed class PlayerInventory
 
         if (cur <= 0) Counts.Remove(id);
         else Counts[id] = cur;
+    }
+
+    public bool Remove(string id, int qty)
+    {
+        if (string.IsNullOrWhiteSpace(id) || qty <= 0) return false;
+        if (!Counts.TryGetValue(id, out var cur) || cur < qty) return false;
+
+        cur -= qty;
+        if (cur <= 0) Counts.Remove(id);
+        else Counts[id] = cur;
+
+        return true;
     }
 }

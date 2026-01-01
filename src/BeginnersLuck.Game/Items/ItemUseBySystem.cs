@@ -52,4 +52,29 @@ public sealed class ItemUseSystem
                 return false;
         }
     }
+
+    public bool TryUseOne(string itemId)
+    {
+        if (_s.Player.Inventory.CountOf(itemId) <= 0)
+            return false;
+
+        // v1: hardcode a couple usable items by id
+        switch (itemId)
+        {
+            case "potion":
+                _s.Player.Heal(10);
+                _s.Player.Inventory.Remove(itemId, 1);
+                // _s.Toasts?.Enqueue("HEALED 10 HP!"); // if ToastQueue supports it; otherwise remove
+                return true;
+
+            case "hi_potion":
+                _s.Player.Heal(25);
+                _s.Player.Inventory.Remove(itemId, 1);
+                // _s.Toasts?.Enqueue("HEALED 25 HP!");
+                return true;
+
+            default:
+                return false;
+        }
+    }
 }

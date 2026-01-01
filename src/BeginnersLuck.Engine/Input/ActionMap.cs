@@ -31,6 +31,16 @@ public sealed class ActionMap
     public bool Released(in InputSnapshot input, GameAction a)
         => Get(a).Released;
 
+    // --- 1-arg overloads for older call sites / ActionMapCompat ---
+    public bool Pressed(GameAction a)
+        => Get(a).Pressed;
+
+    public bool Down(GameAction a)
+        => Get(a).Down;
+
+    public bool Released(GameAction a)
+        => Get(a).Released;
+
     public ActionButton Get(GameAction a)
         => _buttons.TryGetValue(a, out var b) ? b : default;
 

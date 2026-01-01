@@ -32,32 +32,47 @@ public readonly struct InputSnapshot
     // null if mouse is in letterbox bars
     public Point? VirtualMouse { get; }
 
-    // --- Keyboard helpers ---
-    public bool KeyDown(Keys k) => Keyboard.IsKeyDown(k);
-    public bool KeyPressed(Keys k) => Keyboard.IsKeyDown(k) && PrevKeyboard.IsKeyUp(k);
-    public bool KeyReleased(Keys k) => Keyboard.IsKeyUp(k) && PrevKeyboard.IsKeyDown(k);
+    // --------------------
+    // Keyboard helpers
+    // --------------------
+    public bool IsDown(Keys k)
+        => Keyboard.IsKeyDown(k);
 
-    // --- Mouse helpers (fully qualified enum to avoid collision) ---
-    public bool LeftDown => Mouse.LeftButton == Microsoft.Xna.Framework.Input.ButtonState.Pressed;
+    public bool WasDown(Keys k)
+        => PrevKeyboard.IsKeyDown(k);
 
-    public bool LeftPressed =>
-        Mouse.LeftButton == Microsoft.Xna.Framework.Input.ButtonState.Pressed &&
-        PrevMouse.LeftButton == Microsoft.Xna.Framework.Input.ButtonState.Released;
+    public bool Pressed(Keys k)
+        => Keyboard.IsKeyDown(k) && PrevKeyboard.IsKeyUp(k);
 
-    // --- GamePad helpers ---
-    public bool PadDown(Buttons b) => Pad.IsButtonDown(b);
-    public bool PadPressed(Buttons b) => Pad.IsButtonDown(b) && PrevPad.IsButtonUp(b);
+    public bool Released(Keys k)
+        => Keyboard.IsKeyUp(k) && PrevKeyboard.IsKeyDown(k);
 
-    // --- Unified helpers (for ActionMap / gameplay) ---
-    public bool IsDown(Keys k) => Keyboard.IsKeyDown(k);
-    public bool WasDown(Keys k) => PrevKeyboard.IsKeyDown(k);
+    // --------------------
+    // GamePad helpers
+    // --------------------
+    public bool IsDown(Buttons b)
+        => Pad.IsButtonDown(b);
 
-    public bool IsDown(Buttons b) => Pad.IsButtonDown(b);
-    public bool WasDown(Buttons b) => PrevPad.IsButtonDown(b);
+    public bool WasDown(Buttons b)
+        => PrevPad.IsButtonDown(b);
 
-    public bool Pressed(Keys k) => IsDown(k) && !WasDown(k);
-    public bool Pressed(Buttons b) => IsDown(b) && !WasDown(b);
+    public bool Pressed(Buttons b)
+        => Pad.IsButtonDown(b) && PrevPad.IsButtonUp(b);
 
-    public bool Released(Keys k) => !IsDown(k) && WasDown(k);
-    public bool Released(Buttons b) => !IsDown(b) && WasDown(b);
+    public bool Released(Buttons b)
+        => Pad.IsButtonUp(b) && PrevPad.IsButtonDown(b);
+
+    // --------------------
+    // Mouse helpers (optional, consistent)
+    // --------------------
+    public bool MouseLeftDown
+        => Mouse.LeftButton == ButtonState.Pressed;
+
+    public bool MouseLeftPressed
+        => Mouse.LeftButton == ButtonState.Pressed &&
+           PrevMouse.LeftButton == ButtonState.Released;
+
+    public bool MouseLeftReleased
+        => Mouse.LeftButton == ButtonState.Released &&
+           PrevMouse.LeftButton == ButtonState.Pressed;
 }

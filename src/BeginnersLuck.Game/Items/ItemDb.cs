@@ -36,7 +36,6 @@ public sealed class ItemDb
     public string NameOf(string id)
         => _defs.TryGetValue(id, out var def) ? def.Name : id;
 
-    // 🔽 THIS IS THE METHOD YOU ASKED ABOUT
     public string DescOfOrFallback(string id)
     {
         if (_defs.TryGetValue(id, out var def) &&
