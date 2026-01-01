@@ -1,0 +1,12 @@
+{
+  "encounters": [
+    {
+      "id": "slimes_easy",
+      "name": "Slimes",
+      "enemies": [
+        { "id": "slime", "name": "Slime", "hp": 12 },
+        { "id": "slime", "name": "Slime", "hp": 12 }
+      ]
+    }
+  ]
+}

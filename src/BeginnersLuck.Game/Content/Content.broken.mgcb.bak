@@ -1,0 +1,18 @@
+#----------------------------- Global Properties ----------------------------#
+/platform:DesktopGL
+/outputDir:bin/DesktopGL/Content
+/intermediateDir:obj/DesktopGL/net9.0/Content
+/workingDir:.
+/config:
+/profile:Reach
+/compress:False
+#-------------------------------- References --------------------------------#
+#---------------------------------- Content ---------------------------------#
+cat >> src/BeginnersLuck.Game/Content/Content.mgcb <<'EOF'
+#begin Fonts/Default.spritefont
+/importer:FontDescriptionImporter
+/processor:FontDescriptionProcessor
+/processorParam:PremultiplyAlpha=True
+/build:Fonts/Default.spritefont
+#end Fonts/Default.spritefont
+EOF

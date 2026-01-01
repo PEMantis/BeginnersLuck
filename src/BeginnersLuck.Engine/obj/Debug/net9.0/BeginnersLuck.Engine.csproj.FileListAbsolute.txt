@@ -1,0 +1,12 @@
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/bin/Debug/net9.0/BeginnersLuck.Engine.deps.json
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/bin/Debug/net9.0/BeginnersLuck.Engine.dll
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/bin/Debug/net9.0/BeginnersLuck.Engine.pdb
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/obj/Debug/net9.0/BeginnersLuck.Engine.csproj.AssemblyReference.cache
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/obj/Debug/net9.0/BeginnersLuck.Engine.GeneratedMSBuildEditorConfig.editorconfig
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/obj/Debug/net9.0/BeginnersLuck.Engine.AssemblyInfoInputs.cache
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/obj/Debug/net9.0/BeginnersLuck.Engine.AssemblyInfo.cs
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/obj/Debug/net9.0/BeginnersLuck.Engine.csproj.CoreCompileInputs.cache
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/obj/Debug/net9.0/BeginnersLuck.Engine.dll
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/obj/Debug/net9.0/refint/BeginnersLuck.Engine.dll
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/obj/Debug/net9.0/BeginnersLuck.Engine.pdb
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/obj/Debug/net9.0/ref/BeginnersLuck.Engine.dll

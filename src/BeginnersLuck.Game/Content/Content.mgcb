@@ -1,0 +1,9 @@
+/profile:Reach
+/compress:False
+
+#begin Fonts/Default.spritefont
+/importer:FontDescriptionImporter
+/processor:FontDescriptionProcessor
+/processorParam:PremultiplyAlpha=True
+/build:Fonts/Default.spritefont
+#end
