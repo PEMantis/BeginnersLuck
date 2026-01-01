@@ -105,8 +105,8 @@ public sealed class InventoryPage : IMenuPage
 
         if (_items.Count == 0)
         {
-            s.Font.Draw(sb, "(EMPTY)", new Vector2(listRect.X + 10, listRect.Y + 10), Color.White * 0.65f, 1);
-            s.Font.Draw(sb, "Go win some loot.", new Vector2(detailsRect.X + 10, detailsRect.Y + 10), Color.White * 0.55f, 1);
+            s.UiFont.Draw(sb, "(EMPTY)", new Vector2(listRect.X + 10, listRect.Y + 10), Color.White * 0.65f, 1);
+            s.UiFont.Draw(sb, "Go win some loot.", new Vector2(detailsRect.X + 10, detailsRect.Y + 10), Color.White * 0.55f, 1);
             return;
         }
 
@@ -133,11 +133,11 @@ public sealed class InventoryPage : IMenuPage
 
             var it = _items[i];
 
-            s.Font.Draw(sb, it.Name.ToUpperInvariant(), new Vector2(listRect.X + 10, y), Color.White * (sel ? 0.95f : 0.75f), 1);
+            s.UiFont.Draw(sb, it.Name.ToUpperInvariant(), new Vector2(listRect.X + 10, y), Color.White * (sel ? 0.95f : 0.75f), 1);
 
             string qty = $"x{it.Qty}";
             int qtyW = qty.Length * 8;
-            s.Font.Draw(sb, qty, new Vector2(listRect.Right - 10 - qtyW, y), Color.White * (sel ? 0.85f : 0.55f), 1);
+            s.UiFont.Draw(sb, qty, new Vector2(listRect.Right - 10 - qtyW, y), Color.White * (sel ? 0.85f : 0.55f), 1);
 
             y += rowH;
         }
@@ -145,20 +145,20 @@ public sealed class InventoryPage : IMenuPage
         if (_items.Count > visibleRows)
         {
             string hint = $"{_selected + 1}/{_items.Count}";
-            s.Font.Draw(sb, hint, new Vector2(listRect.Right - 10 - hint.Length * 8, listRect.Bottom - 12), Color.White * 0.45f, 1);
+            s.UiFont.Draw(sb, hint, new Vector2(listRect.Right - 10 - hint.Length * 8, listRect.Bottom - 12), Color.White * 0.45f, 1);
         }
 
         var selItem = _items[_selected];
 
-        s.Font.Draw(sb, selItem.Name.ToUpperInvariant(), new Vector2(detailsRect.X + 10, detailsRect.Y + 8), Color.White * 0.92f, 2);
-        s.Font.Draw(sb, $"QTY: {selItem.Qty}", new Vector2(detailsRect.X + 10, detailsRect.Y + 28), Color.White * 0.65f, 1);
+        s.UiFont.Draw(sb, selItem.Name.ToUpperInvariant(), new Vector2(detailsRect.X + 10, detailsRect.Y + 8), Color.White * 0.92f, 2);
+        s.UiFont.Draw(sb, $"QTY: {selItem.Qty}", new Vector2(detailsRect.X + 10, detailsRect.Y + 28), Color.White * 0.65f, 1);
 
         sb.Draw(s.PixelWhite, new Rectangle(detailsRect.X + 10, detailsRect.Y + 40, detailsRect.Width - 20, 1), Color.White * 0.12f);
 
         DrawWrapped(s, sb, selItem.Desc, new Rectangle(detailsRect.X + 10, detailsRect.Y + 46, detailsRect.Width - 20, detailsRect.Height - 56), Color.White * 0.60f, 1);
 
         string actions = "ENTER/A: USE";
-        s.Font.Draw(sb, actions, new Vector2(actionsRect.X + 10, actionsRect.Y + 6), Color.White * 0.60f, 1);
+        s.UiFont.Draw(sb, actions, new Vector2(actionsRect.X + 10, actionsRect.Y + 6), Color.White * 0.60f, 1);
     }
 
     // ---------- helpers ----------
@@ -226,7 +226,7 @@ public sealed class InventoryPage : IMenuPage
             string test = line.Length == 0 ? w : (line + " " + w);
             if (test.Length > charsPerLine)
             {
-                s.Font.Draw(sb, line.ToUpperInvariant(), new Vector2(x, y), color, scale);
+                s.UiFont.Draw(sb, line.ToUpperInvariant(), new Vector2(x, y), color, scale);
                 y += lineH;
                 if (y > r.Bottom - lineH) return;
                 line = w;
@@ -238,6 +238,6 @@ public sealed class InventoryPage : IMenuPage
         }
 
         if (line.Length > 0 && y <= r.Bottom - lineH)
-            s.Font.Draw(sb, line.ToUpperInvariant(), new Vector2(x, y), color, scale);
+            s.UiFont.Draw(sb, line.ToUpperInvariant(), new Vector2(x, y), color, scale);
     }
 }

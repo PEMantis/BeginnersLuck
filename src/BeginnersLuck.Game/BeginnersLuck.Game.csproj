@@ -37,5 +37,8 @@
 <PropertyGroup>
   <Nullable>enable</Nullable>
 </PropertyGroup>
+<PropertyGroup>
+  <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+</PropertyGroup>
 
 </Project>

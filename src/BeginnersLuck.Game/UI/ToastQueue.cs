@@ -40,7 +40,7 @@ public sealed class ToastQueue
             _current = null;
     }
 
-    public void Draw(SpriteBatch sb, Texture2D white, BitmapFont font, int screenW, int screenH)
+    public void Draw(SpriteBatch sb, Texture2D white, IFont font, int screenW, int screenH)
     {
         if (_current == null) return;
 

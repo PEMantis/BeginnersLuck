@@ -125,18 +125,18 @@ public sealed class PauseScene : SceneBase
         // Panel
         MenuRenderer.DrawPanel(sb, _white, _panel, new Color(20, 20, 40) * 0.98f);
 
-        _s.Font.DrawShadow(sb, "PAUSED", new Vector2(_panel.X + 90, _panel.Y + 12), Color.White, scale: 2);
+        _s.TitleFont.DrawShadow(sb, "PAUSED", new Vector2(_panel.X + 90, _panel.Y + 12), Color.White, scale: 2);
 
-        MenuRenderer.DrawButton(sb, _white, _s.Font, _btnResume, "RESUME",
+        MenuRenderer.DrawButton(sb, _white, _s.UiFont, _btnResume, "RESUME",
             focused: _focus == 0, enabled: true, timeSeconds: t, fontScale: 2);
 
-        MenuRenderer.DrawButton(sb, _white, _s.Font, _btnInventory, "INVENTORY",
+        MenuRenderer.DrawButton(sb, _white, _s.UiFont, _btnInventory, "INVENTORY",
             focused: _focus == 1, enabled: true, timeSeconds: t, fontScale: 2);
 
-        MenuRenderer.DrawButton(sb, _white, _s.Font, _btnMenu, "MENU",
+        MenuRenderer.DrawButton(sb, _white, _s.UiFont, _btnMenu, "MENU",
             focused: _focus == 2, enabled: true, timeSeconds: t, fontScale: 2);
 
-        _s.Font.Draw(sb, "ENTER/A: SELECT   BACK/B: RETURN",
+        _s.TitleFont.Draw(sb, "ENTER/A: SELECT   BACK/B: RETURN",
             new Vector2(_panel.X + 30, _panel.Bottom - 16),
             Color.White * 0.8f, scale: 1);
 

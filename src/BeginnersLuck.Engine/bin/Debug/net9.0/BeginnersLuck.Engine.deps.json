@@ -8,7 +8,8 @@
     ".NETCoreApp,Version=v9.0": {
       "BeginnersLuck.Engine/1.0.0": {
         "dependencies": {
-          "MonoGame.Framework.DesktopGL": "3.8.4.1"
+          "MonoGame.Framework.DesktopGL": "3.8.4.1",
+          "StbTrueTypeSharp": "1.26.12"
         },
         "runtime": {
           "BeginnersLuck.Engine.dll": {}
@@ -117,6 +118,14 @@
           }
         }
       },
+      "StbTrueTypeSharp/1.26.12": {
+        "runtime": {
+          "lib/netstandard2.0/StbTrueTypeSharp.dll": {
+            "assemblyVersion": "1.26.12.0",
+            "fileVersion": "1.26.12.0"
+          }
+        }
+      },
       "System.Memory/4.5.3": {},
       "System.ValueTuple/4.5.0": {}
     }
@@ -154,6 +163,13 @@
       "sha512": "sha512-WYnil3DhQHzjCY0dM9I2B3r1vWip90AOuQd25KE4NrjPQBg0tBJFluRLm5YPnO5ZLDmwrfosY8jCQGQRmWI/Pg==",
       "path": "nvorbis/0.10.4",
       "hashPath": "nvorbis.0.10.4.nupkg.sha512"
+    },
+    "StbTrueTypeSharp/1.26.12": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-hCc6/OsfcPa5VsLECcEU2m78WOshBrKwK42nAodSm9Z5wH68f7n66SoiRLCdGCkDaqbWz2TlX4zYHIjogj1HJA==",
+      "path": "stbtruetypesharp/1.26.12",
+      "hashPath": "stbtruetypesharp.1.26.12.nupkg.sha512"
     },
     "System.Memory/4.5.3": {
       "type": "package",

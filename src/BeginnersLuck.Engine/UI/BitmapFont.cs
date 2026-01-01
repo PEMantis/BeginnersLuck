@@ -4,7 +4,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace BeginnersLuck.Engine.UI;
 
-public sealed class BitmapFont
+public sealed class BitmapFont : IFont
 {
     private readonly Texture2D _atlas;
 
@@ -127,5 +127,26 @@ public sealed class BitmapFont
         // 1px shadow for readability
         Draw(sb, text, pos + new Vector2(1, 1), Color.Black * 0.6f, scale);
         Draw(sb, text, pos, color, scale);
+    }
+
+    public void DrawString(SpriteBatch sb, string text, Vector2 pos, Color color, int scale = 1)
+    => Draw(sb, text, pos, color, scale);
+
+    public void DrawStringClipped(SpriteBatch sb, string text, Rectangle clip, Vector2 pos, Color color, int scale = 1)
+    {
+        // If BitmapFont already supports clipping, call it.
+        // Otherwise just draw normally for now (safe default).
+        Draw(sb, text, pos, color, scale);
+    }
+
+    // inside BitmapFont
+    public int LineHeight(int scale = 1)
+    {
+        return LineH * scale;
+    }
+
+    public void Dispose()
+    {
+        throw new NotImplementedException();
     }
 }

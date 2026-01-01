@@ -48,6 +48,10 @@
             "MonoGame.Framework.DesktopGL": {
               "target": "Package",
               "version": "[3.8.4.1, )"
+            },
+            "StbTrueTypeSharp": {
+              "target": "Package",
+              "version": "[1.26.12, )"
             }
           },
           "imports": [

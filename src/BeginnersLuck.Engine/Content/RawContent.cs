@@ -30,4 +30,11 @@ public sealed class RawContent
 
     public string LoadText(string relativePath)
         => File.ReadAllText(Path.Combine(_rootAbs, relativePath));
+
+    public byte[] LoadBytes(string relativePath)
+    {
+        var full = System.IO.Path.Combine(_rootAbs, relativePath.Replace('\\', '/'));
+        return System.IO.File.ReadAllBytes(full);
+    }
+
 }

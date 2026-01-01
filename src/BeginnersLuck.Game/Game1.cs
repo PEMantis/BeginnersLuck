@@ -24,7 +24,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
     private InputHost _input = null!;
     private ActionMap _actions = null!;
     private RawContent _raw = null!;
-    public BitmapFont Font { get; private set; } = null!;
+    public IFont Font { get; private set; } = null!;
     private GameServices _services = null!;
 
     public Game1()
@@ -63,8 +63,18 @@ public class Game1 : Microsoft.Xna.Framework.Game
     protected override void LoadContent()
     {
         _raw = new RawContent(GraphicsDevice);
-        var fontTex = _raw.LoadTexture("Fonts/font8x8.png");
-        var font = new BitmapFont(fontTex, 8, 8, 16, 32);
+       var ttf = _raw.LoadBytes("Fonts/ui.ttf");
+
+        // Title: still big, but controlled
+        var titleFont = new RuntimeTtfFont(GraphicsDevice, ttf, pixelHeight: 16);
+        titleFont.ExtraSpacingX = 1;
+        titleFont.ExtraSpacingY = 3;
+
+        // UI: smaller, for menu items / body
+        var uiFont = new RuntimeTtfFont(GraphicsDevice, ttf, pixelHeight: 10);
+        uiFont.ExtraSpacingX = 1;
+        uiFont.ExtraSpacingY = 2;
+
 
         var rng = new Random(12345);
         var encounterSource = new BasicEncounterSource();
@@ -83,7 +93,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
             scenes: _scenes,
             fade: _fade,
             raw: _raw,
-            font: font,
+            uiFont: uiFont,
+            titleFont: titleFont,
             pixelWhite: px,
             toasts: toasts,
             rng: rng,

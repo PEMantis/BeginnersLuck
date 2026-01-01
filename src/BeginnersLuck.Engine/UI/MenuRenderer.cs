@@ -20,7 +20,7 @@ public static class MenuRenderer
     public static void DrawButton(
         SpriteBatch sb,
         Texture2D white,
-        BitmapFont font,
+        IFont font,
         Rectangle r,
         string text,
         bool focused,
@@ -49,7 +49,7 @@ public static class MenuRenderer
             DrawFocusChevrons(sb, white, r, timeSeconds);
     }
 
-    private static void DrawTextCentered(SpriteBatch sb, BitmapFont font, string text, Rectangle r, Color color, int scale)
+    private static void DrawTextCentered(SpriteBatch sb, IFont font, string text, Rectangle r, Color color, int scale)
     {
         var size = font.Measure(text, scale);
         int x = r.X + (r.Width - size.X) / 2;

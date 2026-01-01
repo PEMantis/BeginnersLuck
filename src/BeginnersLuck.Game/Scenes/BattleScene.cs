@@ -296,14 +296,14 @@ public sealed class BattleScene : SceneBase
         if (showCommands)
         {
             MenuRenderer.DrawButton(
-                sb, _white, _s.Font, _btnAttack, "ATTACK",
+                sb, _white, _s.UiFont, _btnAttack, "ATTACK",
                 focused: _focus == 0,
                 enabled: true,
                 timeSeconds: t,
                 fontScale: 2);
 
             MenuRenderer.DrawButton(
-                sb, _white, _s.Font, _btnRun, "RUN",
+                sb, _white, _s.UiFont, _btnRun, "RUN",
                 focused: _focus == 1,
                 enabled: true,
                 timeSeconds: t,
@@ -322,7 +322,7 @@ public sealed class BattleScene : SceneBase
                     _ => "ENTER/A: CONTINUE"
                 };
 
-            _s.Font.Draw(
+            _s.TitleFont.Draw(
                 sb,
                 hint,
                 new Vector2(_panelCommands.X + 18, _panelCommands.Y + 24),
@@ -353,7 +353,7 @@ public sealed class BattleScene : SceneBase
 
             if (!string.IsNullOrWhiteSpace(prompt))
             {
-                _s.Font.Draw(
+                _s.UiFont.Draw(
                     sb,
                     prompt.ToUpperInvariant(),
                     new Vector2(_panelInfo.X + 12, _panelInfo.Y + 22),
@@ -374,11 +374,11 @@ public sealed class BattleScene : SceneBase
     private void DrawPlayerPanel(SpriteBatch sb)
     {
         // Header
-        _s.Font.Draw(sb, "HERO", new Vector2(_panelLeft.X + 10, _panelLeft.Y + 10), Color.White * 0.9f, 2);
+        _s.UiFont.Draw(sb, "HERO", new Vector2(_panelLeft.X + 10, _panelLeft.Y + 10), Color.White * 0.9f, 2);
 
         // HP
         var hpText = $"HP {_playerHp}/{_playerMaxHp}";
-        _s.Font.Draw(sb, hpText, new Vector2(_panelLeft.X + 10, _panelLeft.Y + 36), Color.White * 0.9f, 1);
+        _s.UiFont.Draw(sb, hpText, new Vector2(_panelLeft.X + 10, _panelLeft.Y + 36), Color.White * 0.9f, 1);
 
         // HP bar
         var bar = new Rectangle(_panelLeft.X + 10, _panelLeft.Y + 52, _panelLeft.Width - 20, 10);
@@ -387,7 +387,7 @@ public sealed class BattleScene : SceneBase
 
     private void DrawEnemiesPanel(SpriteBatch sb)
     {
-        _s.Font.Draw(sb, "ENEMIES", new Vector2(_panelRight.X + 10, _panelRight.Y + 10), Color.White * 0.9f, 2);
+        _s.UiFont.Draw(sb, "ENEMIES", new Vector2(_panelRight.X + 10, _panelRight.Y + 10), Color.White * 0.9f, 2);
 
         int y = _panelRight.Y + 34;
         for (int i = 0; i < _enemies.Length; i++)
@@ -397,7 +397,7 @@ public sealed class BattleScene : SceneBase
             var name = e.Alive ? e.Name.ToUpperInvariant() : $"{e.Name.ToUpperInvariant()} (KO)";
             var c = e.Alive ? Color.White * 0.92f : Color.White * 0.35f;
 
-            _s.Font.Draw(sb, name, new Vector2(_panelRight.X + 10, y), c, 1);
+            _s.UiFont.Draw(sb, name, new Vector2(_panelRight.X + 10, y), c, 1);
 
             var bar = new Rectangle(_panelRight.X + 10, y + 10, _panelRight.Width - 20, 8);
             DrawBar(sb, bar, e.Hp, e.MaxHp, back: new Color(30, 30, 45), fill: new Color(230, 90, 90));
@@ -408,10 +408,10 @@ public sealed class BattleScene : SceneBase
     }
     private void DrawVictorySummary(SpriteBatch sb)
     {
+    var font = _s.Font;
         // Inner padding
-        const int pad = 12;
-
-        var font = _s.Font;
+       var lh = font.LineH(1);
+       var pad = font.LineH(1) * 2;
 
         // Define an inner content rect (safe drawing area)
         var inner = new Rectangle(
@@ -425,10 +425,9 @@ public sealed class BattleScene : SceneBase
 
         // Header
         font.Draw(sb, "REWARDS", new Vector2(x, y), Color.White * 0.9f, scale: 2);
-        y += font.LineH * 2; // <-- correct spacing for scale 2
+        y += font.LineH(1) * 2; // <-- correct spacing for scale 2
 
         // Body lines (scale 1)
-        int lh = font.LineH; // scale 1 line height
         int maxW = inner.Width;
 
         // Helper for a single line that must fit
@@ -479,8 +478,8 @@ public sealed class BattleScene : SceneBase
         bool inMenu = _phase == Phase.PlayerSelect;
 
         // Buttons
-        MenuRenderer.DrawButton(sb, _white!, _s.Font, _btnAttack, "ATTACK", focused: inMenu && _focus == 0, enabled: inMenu, timeSeconds: timeSeconds, fontScale: 2);
-        MenuRenderer.DrawButton(sb, _white!, _s.Font, _btnRun,    "RUN",    focused: inMenu && _focus == 1, enabled: inMenu, timeSeconds: timeSeconds, fontScale: 2);
+        MenuRenderer.DrawButton(sb, _white!, _s.UiFont, _btnAttack, "ATTACK", focused: inMenu && _focus == 0, enabled: inMenu, timeSeconds: timeSeconds, fontScale: 1);
+        MenuRenderer.DrawButton(sb, _white!, _s.UiFont, _btnRun,    "RUN",    focused: inMenu && _focus == 1, enabled: inMenu, timeSeconds: timeSeconds, fontScale: 1);
 
         // Prompt
         string prompt =
@@ -495,7 +494,7 @@ public sealed class BattleScene : SceneBase
             };
 
         if (!string.IsNullOrWhiteSpace(prompt))
-            _s.Font.Draw(
+            _s.UiFont.Draw(
      sb,
      prompt,
      new Vector2(_panelInfo.X + 12, _panelInfo.Y + 22),
@@ -514,7 +513,7 @@ public sealed class BattleScene : SceneBase
         sb.Draw(_white!, new Rectangle(r.X, r.Y, r.Width, 1), Color.White * 0.25f);
         sb.Draw(_white!, new Rectangle(r.X, r.Bottom - 1, r.Width, 1), Color.White * 0.18f);
 
-        DrawTextCentered(sb, _s.Font, _message, r, Color.White * 0.92f, scale: 1);
+        DrawTextCentered(sb, _s.UiFont, _message, r, Color.White * 0.92f, scale: 1);
     }
 
     private void DrawBar(SpriteBatch sb, Rectangle r, int value, int max, Color back, Color fill)
@@ -566,7 +565,7 @@ public sealed class BattleScene : SceneBase
         => Pressed(ks, Keys.Enter) || Pressed(ks, Keys.Space) || Pressed(pad, Buttons.A);
 
     // ---- Text centering (8x8 font) ----
-    private static void DrawTextCentered8x8(SpriteBatch sb, BitmapFont font, string text, Rectangle r, Color color, int scale)
+    private static void DrawTextCentered8x8(SpriteBatch sb, IFont font, string text, Rectangle r, Color color, int scale)
     {
         var size = MeasureText8x8(text, scale);
         var pos = new Vector2(
@@ -576,7 +575,7 @@ public sealed class BattleScene : SceneBase
         font.Draw(sb, text, pos, color, scale);
     }
 
-    private static void DrawTextCentered(SpriteBatch sb, BitmapFont font, string text, Rectangle r, Color color, int scale)
+    private static void DrawTextCentered(SpriteBatch sb, IFont font, string text, Rectangle r, Color color, int scale)
     {
         var size = font.Measure(text, scale);
         var pos = new Vector2(

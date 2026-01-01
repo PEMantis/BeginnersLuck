@@ -134,7 +134,7 @@ public sealed class MenuHubScene : SceneBase
         sb.Draw(_white, _contentRect, new Color(10, 10, 18) * 0.25f);
 
         // Title top
-        _s.Font.Draw(sb, "MENU", new Vector2(_panel.X + 18, _panel.Y + 10), Color.White * 0.9f, 2);
+        _s.TitleFont.Draw(sb, "MENU", new Vector2(_panel.X + 18, _panel.Y + 10), Color.White * 0.9f, 2);
 
         // Tabs list
         int rowH = 20;
@@ -150,19 +150,19 @@ public sealed class MenuHubScene : SceneBase
                 sb.Draw(_white, new Rectangle(_tabsRect.X + 4, y - 2, 2, 18), new Color(140, 200, 255) * 0.55f);
             }
 
-            _s.Font.Draw(sb, _pages[i].Title, new Vector2(_tabsRect.X + 12, y), Color.White * (sel ? 0.95f : 0.70f), 1);
+            _s.TitleFont.Draw(sb, _pages[i].Title, new Vector2(_tabsRect.X + 12, y), Color.White * (sel ? 0.95f : 0.70f), 1);
             y += rowH;
         }
 
         // Page header
-        _s.Font.Draw(sb, _pages[_tabIndex].Title, new Vector2(_contentRect.X + 12, _contentRect.Y + 10), Color.White * 0.9f, 2);
+        _s.TitleFont.Draw(sb, _pages[_tabIndex].Title, new Vector2(_contentRect.X + 12, _contentRect.Y + 10), Color.White * 0.9f, 2);
 
         // Page content area (leave a header margin)
         var inner = new Rectangle(_contentRect.X, _contentRect.Y + 26, _contentRect.Width, _contentRect.Height - 26);
         _pages[_tabIndex].Draw(_s, sb, inner, t);
 
         // Footer hints
-        _s.Font.Draw(sb, "UP/DOWN: TAB   BACK/B: CLOSE",
+        _s.UiFont.Draw(sb, "UP/DOWN: TAB   BACK/B: CLOSE",
             new Vector2(_panel.X + 24, _panel.Bottom - 16),
             Color.White * 0.65f, 1);
 

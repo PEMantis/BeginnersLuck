@@ -241,8 +241,8 @@ public sealed class WorldMapScene : SceneBase
         var gold = _s.Player.Gold;
         var xp = _s.Player.Xp;
 
-        _s.Font.Draw(sb, $"GOLD: {gold}", new Vector2(hud.X + 8, hud.Y + 8), Color.White * 0.9f, scale: 1);
-        _s.Font.Draw(sb, $"XP:   {xp}", new Vector2(hud.X + 8, hud.Y + 18), Color.White * 0.9f, scale: 1);
+        _s.UiFont.Draw(sb, $"GOLD: {gold}", new Vector2(hud.X + 8, hud.Y + 8), Color.White * 0.9f, scale: 1);
+        _s.UiFont.Draw(sb, $"XP:   {xp}", new Vector2(hud.X + 8, hud.Y + 18), Color.White * 0.9f, scale: 1);
 
         // Optional: debug hint (remove anytime)
         // _s.Font.Draw(sb, "ESC/START: PAUSE", new Vector2(8, 48), Color.White * 0.5f, 1);
@@ -266,7 +266,7 @@ public sealed class WorldMapScene : SceneBase
     private bool Pressed(KeyboardState ks, Keys k) => ks.IsKeyDown(k) && !_prevKs.IsKeyDown(k);
     private bool Pressed(GamePadState pad, Buttons b) => pad.IsButtonDown(b) && !_prevPad.IsButtonDown(b);
 
-    private static void DrawTextCentered8x8(SpriteBatch sb, BitmapFont font, string text, Rectangle r, Color color, int scale)
+    private static void DrawTextCentered8x8(SpriteBatch sb, IFont font, string text, Rectangle r, Color color, int scale)
     {
         var size = MeasureText8x8(text, scale);
         var pos = new Vector2(

@@ -106,6 +106,15 @@
           }
         }
       },
+      "StbTrueTypeSharp/1.26.12": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.0/StbTrueTypeSharp.dll": {}
+        },
+        "runtime": {
+          "lib/netstandard2.0/StbTrueTypeSharp.dll": {}
+        }
+      },
       "System.Memory/4.5.3": {
         "type": "package",
         "compile": {
@@ -128,7 +137,8 @@
         "type": "project",
         "framework": ".NETCoreApp,Version=v9.0",
         "dependencies": {
-          "MonoGame.Framework.DesktopGL": "3.8.4.1"
+          "MonoGame.Framework.DesktopGL": "3.8.4.1",
+          "StbTrueTypeSharp": "1.26.12"
         },
         "compile": {
           "bin/placeholder/BeginnersLuck.Engine.dll": {}
@@ -212,6 +222,19 @@
         "lib/netstandard2.0/NVorbis.xml",
         "nvorbis.0.10.4.nupkg.sha512",
         "nvorbis.nuspec"
+      ]
+    },
+    "StbTrueTypeSharp/1.26.12": {
+      "sha512": "hCc6/OsfcPa5VsLECcEU2m78WOshBrKwK42nAodSm9Z5wH68f7n66SoiRLCdGCkDaqbWz2TlX4zYHIjogj1HJA==",
+      "type": "package",
+      "path": "stbtruetypesharp/1.26.12",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/net471/StbTrueTypeSharp.dll",
+        "lib/netstandard2.0/StbTrueTypeSharp.dll",
+        "stbtruetypesharp.1.26.12.nupkg.sha512",
+        "stbtruetypesharp.nuspec"
       ]
     },
     "System.Memory/4.5.3": {

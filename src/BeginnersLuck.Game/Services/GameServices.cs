@@ -20,7 +20,13 @@ public sealed class GameServices
     public SceneManager Scenes { get; }
     public FadeTransition Fade { get; }
     public RawContent Raw { get; }
-    public BitmapFont Font { get; }
+
+    // Fonts
+    public IFont UiFont { get; }
+    public IFont TitleFont { get; }
+
+    // Optional compatibility shim: existing code using _services.Font keeps working (points to UiFont)
+    public IFont Font => UiFont;
 
     // ✅ Shared 1x1 pixel
     public Texture2D PixelWhite { get; }
@@ -44,7 +50,8 @@ public sealed class GameServices
         SceneManager scenes,
         FadeTransition fade,
         RawContent raw,
-        BitmapFont font,
+        IFont uiFont,
+        IFont titleFont,
         Texture2D pixelWhite,
         ToastQueue toasts,
         Random rng,
@@ -56,7 +63,9 @@ public sealed class GameServices
         Scenes = scenes;
         Fade = fade;
         Raw = raw;
-        Font = font;
+
+        UiFont = uiFont;
+        TitleFont = titleFont;
 
         PixelWhite = pixelWhite;
         Toasts = toasts;

@@ -82,9 +82,9 @@ public sealed class TownScene : SceneBase
 
         MenuRenderer.DrawPanel(sb, _white, _panel, new Color(20, 20, 40) * 0.98f);
 
-        _s.Font.Draw(sb, "TOWN", new Vector2(_panel.X + 24, _panel.Y + 20), Color.White, scale: 2);
-        _s.Font.Draw(sb, _townId.ToUpperInvariant(), new Vector2(_panel.X + 24, _panel.Y + 52), Color.White * 0.9f, scale: 1);
-        _s.Font.Draw(sb, "ESC/B: LEAVE", new Vector2(_panel.X + 24, _panel.Bottom - 22), Color.White * 0.8f, scale: 1);
+        _s.TitleFont.Draw(sb, "TOWN", new Vector2(_panel.X + 24, _panel.Y + 20), Color.White, scale: 2);
+        _s.UiFont.Draw(sb, _townId.ToUpperInvariant(), new Vector2(_panel.X + 24, _panel.Y + 52), Color.White * 0.9f, scale: 1);
+        _s.TitleFont.Draw(sb, "ESC/B: LEAVE", new Vector2(_panel.X + 24, _panel.Bottom - 22), Color.White * 0.8f, scale: 1);
 
         sb.End();
     }

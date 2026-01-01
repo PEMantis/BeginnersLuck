@@ -123,7 +123,7 @@ public sealed class InventoryScene : SceneBase
         MenuRenderer.DrawPanel(sb, _white, _panel, new Color(18, 18, 34) * 0.98f);
 
         // Title
-        _s.Font.Draw(sb, "INVENTORY", new Vector2(_panel.X + 16, _panel.Y + 14), Color.White * 0.92f, scale: 2);
+        _s.TitleFont.Draw(sb, "INVENTORY", new Vector2(_panel.X + 16, _panel.Y + 14), Color.White * 0.92f, scale: 2);
 
         // List background (subtle)
         sb.Draw(_white, _listRect, new Color(10, 10, 18) * 0.35f);
@@ -137,7 +137,7 @@ public sealed class InventoryScene : SceneBase
 
         if (items.Length == 0)
         {
-            _s.Font.Draw(sb, "(EMPTY)", new Vector2(_listRect.X + 8, _listRect.Y + 8), Color.White * 0.65f, 1);
+            _s.UiFont.Draw(sb, "(EMPTY)", new Vector2(_listRect.X + 8, _listRect.Y + 8), Color.White * 0.65f, 1);
         }
         else
         {
@@ -161,13 +161,13 @@ public sealed class InventoryScene : SceneBase
                 }
 
                 var (id, name, qty) = items[i];
-                _s.Font.Draw(sb, name.ToUpperInvariant(), new Vector2(_listRect.X + 10, y), Color.White * 0.85f, 1);
+                _s.UiFont.Draw(sb, name.ToUpperInvariant(), new Vector2(_listRect.X + 10, y), Color.White * 0.85f, 1);
 
                 // Right-aligned quantity
                 var qtyText = $"x{qty}";
                 // crude right-align: assume monospace 8px
                 int qtyW = qtyText.Length * 8;
-                _s.Font.Draw(sb, qtyText.ToUpperInvariant(), new Vector2(_listRect.Right - 12 - qtyW, y), Color.White * 0.75f, 1);
+                _s.UiFont.Draw(sb, qtyText.ToUpperInvariant(), new Vector2(_listRect.Right - 12 - qtyW, y), Color.White * 0.75f, 1);
 
                 y += rowH;
             }
@@ -176,13 +176,13 @@ public sealed class InventoryScene : SceneBase
             if (items.Length > visibleRows)
             {
                 var hint = $"{_selected + 1}/{items.Length}";
-                _s.Font.Draw(sb, hint, new Vector2(_listRect.Right - 8 - hint.Length * 8, _listRect.Y - 14), Color.White * 0.55f, 1);
+                _s.UiFont.Draw(sb, hint, new Vector2(_listRect.Right - 8 - hint.Length * 8, _listRect.Y - 14), Color.White * 0.55f, 1);
             }
         }
 
         // Footer
         sb.Draw(_white, _footerRect, new Color(10, 10, 18) * 0.35f);
-        _s.Font.Draw(sb, "ESC/BACK: RETURN", new Vector2(_footerRect.X + 8, _footerRect.Y + 5), Color.White * 0.65f, 1);
+        _s.UiFont.Draw(sb, "ESC/BACK: RETURN", new Vector2(_footerRect.X + 8, _footerRect.Y + 5), Color.White * 0.65f, 1);
 
         sb.End();
     }

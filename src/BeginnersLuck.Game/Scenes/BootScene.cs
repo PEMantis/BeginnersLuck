@@ -139,12 +139,12 @@ public sealed class BootScene : SceneBase
 
         MenuRenderer.DrawPanel(sb, _white, _panel, new Color(18, 18, 34) * 0.98f);
 
-        _s.Font.Draw(sb, "BEGINNER'S LUCK", new Vector2(_panel.X + 22, _panel.Y + 16), Color.White, scale: 2);
+        _s.UiFont.Draw(sb, "BEGINNER'S LUCK", new Vector2(_panel.X + 22, _panel.Y + 16), Color.White, scale: 2);
 
-        MenuRenderer.DrawButton(sb, _white, _s.Font, _btnStart, "START",
+        MenuRenderer.DrawButton(sb, _white, _s.UiFont, _btnStart, "START",
             focused: _focus == 0, enabled: true, timeSeconds: t, fontScale: 2);
 
-        MenuRenderer.DrawButton(sb, _white, _s.Font, _btnQuit, "QUIT",
+        MenuRenderer.DrawButton(sb, _white, _s.UiFont, _btnQuit, "QUIT",
             focused: _focus == 1, enabled: true, timeSeconds: t, fontScale: 2);
 
         sb.End();
