@@ -13,6 +13,10 @@ public sealed class SceneManager
     private GraphicsDevice _graphicsDevice = null!;
     private ContentManager _content = null!;
 
+    // Optional hook invoked after any stack transition (Replace/Push/Pop).
+    // Game1 can set this to consume input, play sounds, etc.
+    public Action? OnTransition { get; set; }
+
     public void Configure(GraphicsDevice graphicsDevice, ContentManager content)
     {
         _graphicsDevice = graphicsDevice;
@@ -35,12 +39,16 @@ public sealed class SceneManager
 
         _stack.Add(scene);
         scene.Load(_graphicsDevice, _content);
+
+        OnTransition?.Invoke();
     }
 
     public void Push(IScene scene)
     {
         _stack.Add(scene);
         scene.Load(_graphicsDevice, _content);
+
+        OnTransition?.Invoke();
     }
 
     public void Pop()
@@ -50,6 +58,8 @@ public sealed class SceneManager
         var top = _stack[^1];
         top.Unload();
         _stack.RemoveAt(_stack.Count - 1);
+
+        OnTransition?.Invoke();
     }
 
     public void Update(UpdateContext uc)

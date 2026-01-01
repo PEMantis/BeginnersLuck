@@ -57,8 +57,12 @@ public class Game1 : Microsoft.Xna.Framework.Game
         _scenes = new SceneManager();
         _fade = new FadeTransition();
 
+        // ✅ Consume input whenever stack transitions (Replace/Push/Pop)
+        _scenes.OnTransition = () => _actions.ConsumeAll();
+
         base.Initialize();
     }
+
 
     protected override void LoadContent()
     {
@@ -113,6 +117,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
 
         _scenes.Configure(GraphicsDevice, Content);
         _scenes.Replace(new Scenes.BootScene(_services));
+        _scenes.OnTransition = () => _actions.ConsumeAll();
 
     }
 
@@ -120,11 +125,14 @@ public class Game1 : Microsoft.Xna.Framework.Game
     {
         _input.Update(_pixel);
 
-        // Hard-exit (optional). Or map this to Pause/Cancel.
-        if (_input.Snapshot.KeyPressed(Keys.F10))
-            Exit();
+        float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+        _actions.Update(_input.Snapshot, dt);
 
         var uc = new UpdateContext(gameTime, _input.Snapshot, _actions);
+
+        // Hard-exit routed through ActionMap (single vocabulary)
+        if (uc.Actions.System.Quit.Pressed)
+            Exit();
 
         _fade.Update(gameTime);
         _scenes.Update(uc);
@@ -132,17 +140,18 @@ public class Game1 : Microsoft.Xna.Framework.Game
         base.Update(gameTime);
     }
 
+
     protected override void Draw(GameTime gameTime)
     {
         _pixel.BeginWorld(Color.CornflowerBlue);
         _input.Update(_pixel);
         // Escape OR controller Back can be handled as Cancel/Pause depending on your preference
-        if (_actions.Pressed(_input.Snapshot, GameAction.Pause) ||
-            _input.Snapshot.KeyPressed(Keys.Escape)) // keep this if you want hard-exit on PC
-        {
-            // optional: bring up pause instead of Exit
-            // Exit();
-        }
+        // if (_actions.Pressed(_input.Snapshot, GameAction.Pause) ||
+        //     _input.Snapshot.KeyPressed(Keys.Escape)) // keep this if you want hard-exit on PC
+        // {
+        //     // optional: bring up pause instead of Exit
+        //     // Exit();
+        // }
 
         var rc = new BeginnersLuck.Engine.Rendering.RenderContext(gameTime, _pixel, _pixel.SpriteBatch);
 

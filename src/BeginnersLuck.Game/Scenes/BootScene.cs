@@ -78,6 +78,7 @@ public sealed class BootScene : SceneBase
             {
                 // Start game
                 _s.Scenes.Replace(new WorldMapScene(_s));
+                uc.Actions.ConsumeAll();
                 _prevKs = ks;
                 _prevPad = pad;
                 return;

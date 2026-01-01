@@ -108,4 +108,31 @@ public static class MenuRenderer
         sb.Draw(white, new Rectangle(r.X, r.Y, t, r.Height), c);
         sb.Draw(white, new Rectangle(r.Right - t, r.Y, t, r.Height), c);
     }
+
+    public static void DrawFooterHint(
+    SpriteBatch sb,
+    IFont font,
+    Rectangle panel,
+    string leftHint,
+    string rightHint,
+    Color color,
+    int scale = 1,
+    int padding = 10)
+    {
+        // Footer strip inside the panel
+        int lh = font.LineHeight(scale);
+        var r = new Rectangle(
+            panel.X + padding,
+            panel.Bottom - padding - lh,
+            panel.Width - padding * 2,
+            lh);
+
+        // Left aligned
+        font.Draw(sb, leftHint, new Vector2(r.X, r.Y), color, scale);
+
+        // Right aligned
+        var rightSize = font.Measure(rightHint, scale);
+        font.Draw(sb, rightHint, new Vector2(r.Right - rightSize.X, r.Y), color, scale);
+    }
+
 }

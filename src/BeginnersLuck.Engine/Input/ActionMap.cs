@@ -4,91 +4,159 @@ namespace BeginnersLuck.Engine.Input;
 
 public sealed class ActionMap
 {
-    private readonly Dictionary<GameAction, ActionBinding> _bindings = new();
+    // Repeat tuning for directional actions
+    public float RepeatDelay { get; set; } = 0.25f;
+    public float RepeatRate  { get; set; } = 0.10f;
 
-    public ActionMap Bind(GameAction action, ActionBinding binding)
+    // Modern grouped actions
+    public UiActions Ui { get; } = new();
+    public SystemActions System { get; } = new();
+
+    // Backing store for GameAction mapping (MenuModel expects this)
+    private readonly Dictionary<GameAction, ActionButton> _buttons = new();
+
+    private bool _consumeThisFrame;
+
+    private RepeatState _upRep, _downRep, _leftRep, _rightRep;
+
+    public void ConsumeAll() => _consumeThisFrame = true;
+
+    // --- Compatibility API used by MenuModel ---
+    public bool Pressed(in InputSnapshot input, GameAction a)
+        => Get(a).Pressed;
+
+    public bool Down(in InputSnapshot input, GameAction a)
+        => Get(a).Down;
+
+    public bool Released(in InputSnapshot input, GameAction a)
+        => Get(a).Released;
+
+    public ActionButton Get(GameAction a)
+        => _buttons.TryGetValue(a, out var b) ? b : default;
+
+    public void Update(InputSnapshot input, float dt)
     {
-        _bindings[action] = binding;
-        return this;
+        if (_consumeThisFrame)
+        {
+            _consumeThisFrame = false;
+            _buttons.Clear();
+
+            Ui.Up = default;
+            Ui.Down = default;
+            Ui.Left = default;
+            Ui.Right = default;
+            Ui.Confirm = default;
+            Ui.Cancel = default;
+            Ui.Menu = default;
+
+            System.Quit = default;
+
+            _upRep = default;
+            _downRep = default;
+            _leftRep = default;
+            _rightRep = default;
+
+            return;
+        }
+
+        // ----- NAV (digital + dpad + stick handled by MenuModel, but we still provide buttons) -----
+        bool upDown = input.IsDown(Keys.Up) || input.IsDown(Keys.W) || input.IsDown(Buttons.DPadUp);
+        bool dnDown = input.IsDown(Keys.Down) || input.IsDown(Keys.S) || input.IsDown(Buttons.DPadDown);
+        bool lfDown = input.IsDown(Keys.Left) || input.IsDown(Keys.A) || input.IsDown(Buttons.DPadLeft);
+        bool rtDown = input.IsDown(Keys.Right) || input.IsDown(Keys.D) || input.IsDown(Buttons.DPadRight);
+
+        // Repeat-enabled for UI navigation
+        var upBtn = MakeRepeatButton(upDown, dt, ref _upRep);
+        var dnBtn = MakeRepeatButton(dnDown, dt, ref _downRep);
+        var lfBtn = MakeRepeatButton(lfDown, dt, ref _leftRep);
+        var rtBtn = MakeRepeatButton(rtDown, dt, ref _rightRep);
+
+        Ui.Up = upBtn;
+        Ui.Down = dnBtn;
+        Ui.Left = lfBtn;
+        Ui.Right = rtBtn;
+
+        _buttons[GameAction.MoveUp] = upBtn;
+        _buttons[GameAction.MoveDown] = dnBtn;
+        _buttons[GameAction.MoveLeft] = lfBtn;
+        _buttons[GameAction.MoveRight] = rtBtn;
+
+        // ----- ACTIONS -----
+        bool confirmDown = input.IsDown(Keys.Enter) || input.IsDown(Keys.Space) || input.IsDown(Buttons.A);
+        bool confirmWas  = input.WasDown(Keys.Enter) || input.WasDown(Keys.Space) || input.WasDown(Buttons.A);
+        var confirmBtn   = MakeButton(confirmDown, confirmWas);
+
+        bool cancelDown = input.IsDown(Keys.Escape) || input.IsDown(Buttons.B) || input.IsDown(Buttons.Back);
+        bool cancelWas  = input.WasDown(Keys.Escape) || input.WasDown(Buttons.B) || input.WasDown(Buttons.Back);
+        var cancelBtn   = MakeButton(cancelDown, cancelWas);
+
+        bool menuDown = input.IsDown(Keys.Tab) || input.IsDown(Buttons.Start);
+        bool menuWas  = input.WasDown(Keys.Tab) || input.WasDown(Buttons.Start);
+        var menuBtn   = MakeButton(menuDown, menuWas);
+
+        bool quitDown = input.IsDown(Keys.F10);
+        bool quitWas  = input.WasDown(Keys.F10);
+        var quitBtn   = MakeButton(quitDown, quitWas);
+
+        Ui.Confirm = confirmBtn;
+        Ui.Cancel = cancelBtn;
+        Ui.Menu = menuBtn;
+
+        System.Quit = quitBtn;
+
+        _buttons[GameAction.Confirm] = confirmBtn;
+        _buttons[GameAction.Cancel] = cancelBtn;
+        _buttons[GameAction.Menu] = menuBtn;
+        _buttons[GameAction.Quit] = quitBtn;
     }
 
-    public bool Down(in InputSnapshot input, GameAction action)
+    private static ActionButton MakeButton(bool down, bool wasDown)
     {
-        if (!_bindings.TryGetValue(action, out var b)) return false;
-
-        foreach (var k in b.Keys)
-            if (input.Keyboard.IsKeyDown(k)) return true;
-
-        foreach (var btn in b.Buttons)
-            if (input.Pad.IsButtonDown(btn)) return true;
-
-        return false;
+        bool pressed = down && !wasDown;
+        bool released = !down && wasDown;
+        return new ActionButton(down, pressed, released, repeated: pressed);
     }
 
-    public bool Pressed(in InputSnapshot input, GameAction action)
+    private ActionButton MakeRepeatButton(bool down, float dt, ref RepeatState rep)
     {
-        if (!_bindings.TryGetValue(action, out var b)) return false;
+        bool pressed = down && !rep.WasDown;
+        bool released = !down && rep.WasDown;
 
-        foreach (var k in b.Keys)
-            if (input.KeyPressed(k)) return true;
+        bool repeated = false;
 
-        foreach (var btn in b.Buttons)
-            if (input.PadPressed(btn)) return true;
+        if (down)
+        {
+            rep.TimeHeld += dt;
 
-        return false;
+            if (pressed)
+            {
+                rep.NextFireAt = RepeatDelay;
+                repeated = true;
+            }
+            else if (rep.TimeHeld >= rep.NextFireAt)
+            {
+                repeated = true;
+                rep.NextFireAt += RepeatRate;
+            }
+        }
+        else
+        {
+            rep = default;
+        }
+
+        rep.WasDown = down;
+
+        // For UI we treat repeated as “fire”
+        return new ActionButton(down, pressed, released, repeated);
     }
-
-    public bool Released(in InputSnapshot input, GameAction action)
-    {
-        if (!_bindings.TryGetValue(action, out var b)) return false;
-
-        foreach (var k in b.Keys)
-            if (input.KeyReleased(k)) return true;
-
-        // add if you want pad release queries later
-        // foreach (var btn in b.Buttons) ...
-
-        return false;
-    }
-
     public static ActionMap CreateDefault()
     {
-        // “Feels right” defaults for keyboard + Xbox-style pad
-        return new ActionMap()
-            .Bind(GameAction.Confirm, ActionBinding.Both(
-                keys: new[] { Keys.Enter, Keys.Space },
-                buttons: new[] { Buttons.A }))
-
-            .Bind(GameAction.Cancel, ActionBinding.Both(
-                keys: new[] { Keys.Escape, Keys.Back },
-                buttons: new[] { Buttons.B }))
-
-            .Bind(GameAction.Pause, ActionBinding.Both(
-                keys: new[] { Keys.Tab },
-                buttons: new[] { Buttons.Start }))
-
-            .Bind(GameAction.MoveUp, ActionBinding.Both(
-                keys: new[] { Keys.W, Keys.Up },
-                buttons: new[] { Buttons.DPadUp }))
-
-            .Bind(GameAction.MoveDown, ActionBinding.Both(
-                keys: new[] { Keys.S, Keys.Down },
-                buttons: new[] { Buttons.DPadDown }))
-
-            .Bind(GameAction.MoveLeft, ActionBinding.Both(
-                keys: new[] { Keys.A, Keys.Left },
-                buttons: new[] { Buttons.DPadLeft }))
-
-            .Bind(GameAction.MoveRight, ActionBinding.Both(
-                keys: new[] { Keys.D, Keys.Right },
-                buttons: new[] { Buttons.DPadRight }))
-
-            .Bind(GameAction.MoveLeft, ActionBinding.Both(
-                keys: new[] { Keys.A, Keys.Left },
-                buttons: new[] { Buttons.DPadLeft }))
-                
-            .Bind(GameAction.MoveRight, ActionBinding.Both(
-                keys: new[] { Keys.D, Keys.Right },
-                buttons: new[] { Buttons.DPadRight }));
+        return new ActionMap
+        {
+            // Menu navigation feel
+            RepeatDelay = 0.25f,
+            RepeatRate = 0.09f
+        };
     }
+
 }

@@ -133,6 +133,7 @@ public sealed class MenuModel
 
     private static Point GetPressedDir(in InputSnapshot input, ActionMap actions)
     {
+      
         // Priority order prevents “two directions pressed” weirdness
         if (actions.Pressed(input, GameAction.MoveUp)) return new Point(0, -1);
         if (actions.Pressed(input, GameAction.MoveDown)) return new Point(0, +1);
