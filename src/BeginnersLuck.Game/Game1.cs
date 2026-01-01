@@ -66,15 +66,18 @@ public class Game1 : Microsoft.Xna.Framework.Game
        var ttf = _raw.LoadBytes("Fonts/ui.ttf");
 
         // Title: still big, but controlled
-        var titleFont = new RuntimeTtfFont(GraphicsDevice, ttf, pixelHeight: 16);
+        var titleFont = new RuntimeTtfFont(GraphicsDevice, ttf, pixelHeight: 10);
         titleFont.ExtraSpacingX = 1;
         titleFont.ExtraSpacingY = 3;
 
         // UI: smaller, for menu items / body
-        var uiFont = new RuntimeTtfFont(GraphicsDevice, ttf, pixelHeight: 10);
+        var uiFont = new RuntimeTtfFont(GraphicsDevice, ttf, pixelHeight: 8);
         uiFont.ExtraSpacingX = 1;
         uiFont.ExtraSpacingY = 2;
 
+        var buttonFont = new RuntimeTtfFont(GraphicsDevice, ttf, pixelHeight: 6);
+        buttonFont.ExtraSpacingX = 1;
+        buttonFont.ExtraSpacingY = 1;
 
         var rng = new Random(12345);
         var encounterSource = new BasicEncounterSource();
@@ -95,6 +98,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
             raw: _raw,
             uiFont: uiFont,
             titleFont: titleFont,
+            buttonFont: buttonFont,
             pixelWhite: px,
             toasts: toasts,
             rng: rng,

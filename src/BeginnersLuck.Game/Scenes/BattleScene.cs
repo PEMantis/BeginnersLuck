@@ -296,14 +296,14 @@ public sealed class BattleScene : SceneBase
         if (showCommands)
         {
             MenuRenderer.DrawButton(
-                sb, _white, _s.UiFont, _btnAttack, "ATTACK",
+                sb, _white, _s.ButtonFont, _btnAttack, "ATTACK",
                 focused: _focus == 0,
                 enabled: true,
                 timeSeconds: t,
                 fontScale: 2);
 
             MenuRenderer.DrawButton(
-                sb, _white, _s.UiFont, _btnRun, "RUN",
+                sb, _white, _s.ButtonFont, _btnRun, "RUN",
                 focused: _focus == 1,
                 enabled: true,
                 timeSeconds: t,
@@ -374,22 +374,37 @@ public sealed class BattleScene : SceneBase
     private void DrawPlayerPanel(SpriteBatch sb)
     {
         // Header
-        _s.UiFont.Draw(sb, "HERO", new Vector2(_panelLeft.X + 10, _panelLeft.Y + 10), Color.White * 0.9f, 2);
+        _s.TitleFont.DrawString(
+            sb,
+            "HERO",
+            new Vector2(_panelLeft.X + 10, _panelLeft.Y + 10),
+            Color.White * 0.9f,
+            1);
 
         // HP
         var hpText = $"HP {_playerHp}/{_playerMaxHp}";
-        _s.UiFont.Draw(sb, hpText, new Vector2(_panelLeft.X + 10, _panelLeft.Y + 36), Color.White * 0.9f, 1);
+        _s.UiFont.DrawString(
+            sb,
+            hpText,
+            new Vector2(_panelLeft.X + 10, _panelLeft.Y + 34),
+            Color.White * 0.9f,
+            1);
 
         // HP bar
-        var bar = new Rectangle(_panelLeft.X + 10, _panelLeft.Y + 52, _panelLeft.Width - 20, 10);
+        var bar = new Rectangle(_panelLeft.X + 10, _panelLeft.Y + 50, _panelLeft.Width - 20, 10);
         DrawBar(sb, bar, _playerHp, _playerMaxHp, back: new Color(30, 30, 45), fill: new Color(80, 220, 120));
     }
-
     private void DrawEnemiesPanel(SpriteBatch sb)
     {
-        _s.UiFont.Draw(sb, "ENEMIES", new Vector2(_panelRight.X + 10, _panelRight.Y + 10), Color.White * 0.9f, 2);
+        _s.TitleFont.DrawString(
+            sb,
+            "ENEMIES",
+            new Vector2(_panelRight.X + 10, _panelRight.Y + 10),
+            Color.White * 0.9f,
+            1);
 
         int y = _panelRight.Y + 34;
+
         for (int i = 0; i < _enemies.Length; i++)
         {
             var e = _enemies[i];
@@ -397,7 +412,7 @@ public sealed class BattleScene : SceneBase
             var name = e.Alive ? e.Name.ToUpperInvariant() : $"{e.Name.ToUpperInvariant()} (KO)";
             var c = e.Alive ? Color.White * 0.92f : Color.White * 0.35f;
 
-            _s.UiFont.Draw(sb, name, new Vector2(_panelRight.X + 10, y), c, 1);
+            _s.UiFont.DrawString(sb, name, new Vector2(_panelRight.X + 10, y), c, 1);
 
             var bar = new Rectangle(_panelRight.X + 10, y + 10, _panelRight.Width - 20, 8);
             DrawBar(sb, bar, e.Hp, e.MaxHp, back: new Color(30, 30, 45), fill: new Color(230, 90, 90));
@@ -406,14 +421,12 @@ public sealed class BattleScene : SceneBase
             if (y > _panelRight.Bottom - 18) break;
         }
     }
+
     private void DrawVictorySummary(SpriteBatch sb)
     {
-    var font = _s.Font;
         // Inner padding
-       var lh = font.LineH(1);
-       var pad = font.LineH(1) * 2;
+        const int pad = 10;
 
-        // Define an inner content rect (safe drawing area)
         var inner = new Rectangle(
             _panelInfo.X + pad,
             _panelInfo.Y + pad,
@@ -424,25 +437,24 @@ public sealed class BattleScene : SceneBase
         int y = inner.Y;
 
         // Header
-        font.Draw(sb, "REWARDS", new Vector2(x, y), Color.White * 0.9f, scale: 2);
-        y += font.LineH(1) * 2; // <-- correct spacing for scale 2
+        _s.TitleFont.DrawString(sb, "REWARDS", new Vector2(x, y), Color.White * 0.9f, 1);
+        y += _s.TitleFont.LineHeight(1);
 
-        // Body lines (scale 1)
-        int maxW = inner.Width;
-
-        // Helper for a single line that must fit
+        // Body lines
         void Line(string text, float alpha = 0.85f)
         {
             text = text.ToUpperInvariant();
-            text = font.TrimToWidth(text, maxW, scale: 1);
-            font.Draw(sb, text, new Vector2(x, y), Color.White * alpha, scale: 1);
-            y += lh;
+
+            // crude trim: keep it simple for now (we can add a real TrimToWidth helper on IFont later)
+            // If you still have TrimToWidth extension for IFont, feel free to call it here.
+            _s.UiFont.DrawString(sb, text, new Vector2(x, y), Color.White * alpha, 1);
+            y += _s.UiFont.LineHeight(1);
         }
 
         Line($"XP:   {_rewardXp}", 0.85f);
         Line($"GOLD: {_rewardGold}", 0.85f);
 
-        y += 1; // tiny breathing room
+        y += 2;
         Line("LOOT:", 0.75f);
 
         if (_rewardLoot.Count == 0)
@@ -451,8 +463,9 @@ public sealed class BattleScene : SceneBase
             return;
         }
 
-        // How many loot lines can we show in the remaining space?
+        // Fit loot lines into remaining space
         int remainingPx = inner.Bottom - y;
+        int lh = _s.UiFont.LineHeight(1);
         int maxLines = Math.Max(1, remainingPx / lh);
 
         int shown = 0;
@@ -464,44 +477,8 @@ public sealed class BattleScene : SceneBase
             shown++;
         }
 
-        // If we truncated, show a final hint if there's room
         if (_rewardLoot.Count > shown && (inner.Bottom - y) >= lh)
-        {
             Line($"(+{_rewardLoot.Count - shown} MORE)", 0.60f);
-        }
-    }
-
-
-
-    private void DrawMenu(SpriteBatch sb, float timeSeconds)
-    {
-        bool inMenu = _phase == Phase.PlayerSelect;
-
-        // Buttons
-        MenuRenderer.DrawButton(sb, _white!, _s.UiFont, _btnAttack, "ATTACK", focused: inMenu && _focus == 0, enabled: inMenu, timeSeconds: timeSeconds, fontScale: 1);
-        MenuRenderer.DrawButton(sb, _white!, _s.UiFont, _btnRun,    "RUN",    focused: inMenu && _focus == 1, enabled: inMenu, timeSeconds: timeSeconds, fontScale: 1);
-
-        // Prompt
-        string prompt =
-            _phase switch
-            {
-                Phase.Intro => "ENTER/A: START",
-                Phase.PlayerSelect => "ENTER/A: SELECT",
-                Phase.Victory => "ENTER/A: CONTINUE",
-                Phase.Defeat => "ENTER/A: CONTINUE",
-                Phase.Exit => "ENTER/A: LEAVE",
-                _ => ""
-            };
-
-        if (!string.IsNullOrWhiteSpace(prompt))
-            _s.UiFont.Draw(
-     sb,
-     prompt,
-     new Vector2(_panelInfo.X + 12, _panelInfo.Y + 22),
-     Color.White * 0.75f,
-     1
- );
-
     }
 
     private void DrawMessage(SpriteBatch sb)

@@ -28,6 +28,8 @@ public sealed class GameServices
     // Optional compatibility shim: existing code using _services.Font keeps working (points to UiFont)
     public IFont Font => UiFont;
 
+    public IFont ButtonFont { get; }
+
     // ✅ Shared 1x1 pixel
     public Texture2D PixelWhite { get; }
 
@@ -52,6 +54,7 @@ public sealed class GameServices
         RawContent raw,
         IFont uiFont,
         IFont titleFont,
+        IFont buttonFont,
         Texture2D pixelWhite,
         ToastQueue toasts,
         Random rng,
@@ -66,7 +69,8 @@ public sealed class GameServices
 
         UiFont = uiFont;
         TitleFont = titleFont;
-
+        ButtonFont = buttonFont;
+        
         PixelWhite = pixelWhite;
         Toasts = toasts;
 

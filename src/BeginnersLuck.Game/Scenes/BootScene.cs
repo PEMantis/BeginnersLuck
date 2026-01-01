@@ -15,15 +15,8 @@ namespace BeginnersLuck.Game.Scenes;
 public sealed class BootScene : SceneBase
 {
     private readonly GameServices _s;
-
     private Texture2D? _white;
-
-    private readonly Rectangle _panel = new(80, 60, 320, 150);
-    private readonly Rectangle _btnStart = new(110, 105, 260, 32);
-    private readonly Rectangle _btnQuit  = new(110, 145, 260, 32);
-
     private int _focus = 0;
-
     private KeyboardState _prevKs;
     private GamePadState _prevPad;
     private bool _eatFirstUpdate = true;
@@ -110,42 +103,67 @@ public sealed class BootScene : SceneBase
 
         sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
 
-        // If _white is null, we can't draw much. But we can avoid crashing.
         if (_white == null)
         {
             sb.End();
             return;
         }
 
-        // Background always safe now
-        sb.Draw(_white, new Rectangle(0, 0, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight),
+        // Background
+        sb.Draw(_white,
+            new Rectangle(0, 0, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight),
             new Color(10, 12, 22));
 
-        // If font is null, draw simple blocks and bail (prevents crash + tells you what's wrong)
-        if (_s.Font == null)
+        // Basic guard (Font should never be null, but still)
+        if (_s.UiFont == null || _s.TitleFont == null || _s.ButtonFont == null)
         {
-            // big panel
-            sb.Draw(_white, new Rectangle(60, 70, 360, 120), new Color(25, 25, 45) * 0.95f);
-            // "FONT NULL" blocks
-            sb.Draw(_white, new Rectangle(80, 95, 120, 10), Color.Red * 0.8f);
-            sb.Draw(_white, new Rectangle(80, 115, 180, 10), Color.Red * 0.6f);
-
             sb.End();
             return;
         }
 
-        // Normal UI
         float t = (float)rc.GameTime.TotalGameTime.TotalSeconds;
 
-        MenuRenderer.DrawPanel(sb, _white, _panel, new Color(18, 18, 34) * 0.98f);
+        // ===== Layout =====
+        // Use a safe area so this scales with your internal resolution.
+        var screen = new Rectangle(0, 0, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
+        var safe = UiLayout.Inset(screen, 24);
 
-        _s.UiFont.Draw(sb, "BEGINNER'S LUCK", new Vector2(_panel.X + 22, _panel.Y + 16), Color.White, scale: 2);
+        // Panel size derived from content instead of hard-coded.
+        // (Tweak these 3 numbers once and everything stays aligned.)
+        int panelW = 360;
+        int panelH = 170;
 
-        MenuRenderer.DrawButton(sb, _white, _s.UiFont, _btnStart, "START",
-            focused: _focus == 0, enabled: true, timeSeconds: t, fontScale: 2);
+        var panel = UiLayout.Centered(safe, panelW, panelH);
 
-        MenuRenderer.DrawButton(sb, _white, _s.UiFont, _btnQuit, "QUIT",
-            focused: _focus == 1, enabled: true, timeSeconds: t, fontScale: 2);
+        // Title line
+        var titlePos = new Vector2(panel.X + 18, panel.Y + 14);
+
+        // Buttons (same width, stacked)
+        int btnW = panelW - 60;
+        int btnH = 30;
+        int btnX = panel.X + (panelW - btnW) / 2;
+        int btnY0 = panel.Y + 62;
+        int btnGap = 10;
+
+        var btnStart = new Rectangle(btnX, btnY0, btnW, btnH);
+        var btnQuit = new Rectangle(btnX, btnY0 + btnH + btnGap, btnW, btnH);
+
+        // ===== Draw =====
+        MenuRenderer.DrawPanel(sb, _white, panel, new Color(18, 18, 34) * 0.98f);
+
+        // Title
+        var title = "BEGINNER'S LUCK";
+        var titleSize = _s.TitleFont.Measure(title, 1);
+        var titleX = panel.X + (panel.Width - titleSize.X) / 2;
+        var titleY = panel.Y + 14;
+        _s.TitleFont.DrawString(sb, title, new Vector2(titleX, titleY), Color.White, 1);
+
+        // Buttons should also be scale 1 with ButtonFont.
+        MenuRenderer.DrawButton(sb, _white, _s.ButtonFont, btnStart, "START",
+            focused: _focus == 0, enabled: true, timeSeconds: t, fontScale: 1, contentPadX: 24, textBiasY: -1);
+
+        MenuRenderer.DrawButton(sb, _white, _s.ButtonFont, btnQuit, "QUIT",
+            focused: _focus == 1, enabled: true, timeSeconds: t, fontScale: 1, contentPadX: 24, textBiasY: -1);
 
         sb.End();
     }
