@@ -5,10 +5,11 @@ using BeginnersLuck.Engine.Scenes;
 using BeginnersLuck.Engine.Transitions;
 using BeginnersLuck.Engine.UI;
 using BeginnersLuck.Game.Encounters;
-using BeginnersLuck.Game.World;
 using BeginnersLuck.Game.Items;
 using BeginnersLuck.Game.State;
-using Microsoft.Xna.Framework.Graphics; // ✅ ADD
+using BeginnersLuck.Game.UI;
+using BeginnersLuck.Game.World;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace BeginnersLuck.Game.Services;
 
@@ -21,10 +22,16 @@ public sealed class GameServices
     public RawContent Raw { get; }
     public BitmapFont Font { get; }
 
-    // ✅ Shared 1x1 pixel texture for UI primitives
+    // ✅ Shared 1x1 pixel
     public Texture2D PixelWhite { get; }
 
-    // Game-level services (safe here; this project owns them)
+    // ✅ Toasts
+    public ToastQueue Toasts { get; }
+
+    // ✅ Item use logic (set after construction to avoid circular dependency)
+    public ItemUseSystem ItemUse { get; set; } = null!;
+
+    // Game-level services
     public Random Rng { get; }
     public EncounterDirector EncounterDirector { get; }
     public ZoneMap Zones { get; set; } = null!;
@@ -38,7 +45,8 @@ public sealed class GameServices
         FadeTransition fade,
         RawContent raw,
         BitmapFont font,
-        Texture2D pixelWhite,          // ✅ ADD
+        Texture2D pixelWhite,
+        ToastQueue toasts,
         Random rng,
         EncounterDirector encounters,
         PlayerState player,
@@ -50,7 +58,8 @@ public sealed class GameServices
         Raw = raw;
         Font = font;
 
-        PixelWhite = pixelWhite;       // ✅ ADD
+        PixelWhite = pixelWhite;
+        Toasts = toasts;
 
         Rng = rng;
         EncounterDirector = encounters;

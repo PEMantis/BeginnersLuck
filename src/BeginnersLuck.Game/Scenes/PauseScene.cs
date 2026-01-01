@@ -125,7 +125,7 @@ public sealed class PauseScene : SceneBase
         // Panel
         MenuRenderer.DrawPanel(sb, _white, _panel, new Color(20, 20, 40) * 0.98f);
 
-        _s.Font.Draw(sb, "PAUSED", new Vector2(_panel.X + 90, _panel.Y + 12), Color.White, scale: 2);
+        _s.Font.DrawShadow(sb, "PAUSED", new Vector2(_panel.X + 90, _panel.Y + 12), Color.White, scale: 2);
 
         MenuRenderer.DrawButton(sb, _white, _s.Font, _btnResume, "RESUME",
             focused: _focus == 0, enabled: true, timeSeconds: t, fontScale: 2);

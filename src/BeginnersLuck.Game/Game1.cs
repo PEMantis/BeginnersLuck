@@ -11,6 +11,7 @@ using BeginnersLuck.Engine.UI;
 using BeginnersLuck.Game.Services;
 using BeginnersLuck.Game.Encounters;
 using System;
+using BeginnersLuck.Game.Items;
 namespace BeginnersLuck.Game;
 
 public class Game1 : Microsoft.Xna.Framework.Game
@@ -72,20 +73,27 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var items = BeginnersLuck.Game.Items.DefaultItems.Create();
 
         var px = new Texture2D(GraphicsDevice, 1, 1);
-        px.SetData(new[] { Microsoft.Xna.Framework.Color.White });
+        px.SetData(new[] { Color.White });
 
-        _services = new GameServices(
+        var toasts = new BeginnersLuck.Game.UI.ToastQueue();
+
+        // your existing: rng, encounterDirector, player, itemDb, raw, font
+        _services = new BeginnersLuck.Game.Services.GameServices(
             pixel: _pixel,
             scenes: _scenes,
             fade: _fade,
             raw: _raw,
             font: font,
-            pixelWhite: px, // ✅ NEW
+            pixelWhite: px,
+            toasts: toasts,
             rng: rng,
             encounters: encounterDirector,
             player: player,
             items: items
         );
+
+        // avoid circular dependency by setting after
+        _services.ItemUse = new BeginnersLuck.Game.Items.ItemUseSystem(_services);
 
 
         _scenes.Configure(GraphicsDevice, Content);

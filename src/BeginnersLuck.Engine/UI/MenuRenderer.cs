@@ -49,23 +49,11 @@ public static class MenuRenderer
             DrawFocusChevrons(sb, white, r, timeSeconds);
     }
 
-    private static void DrawTextCentered(
-        SpriteBatch sb,
-        BitmapFont font,
-        string text,
-        Rectangle r,
-        Color color,
-        int scale)
+    private static void DrawTextCentered(SpriteBatch sb, BitmapFont font, string text, Rectangle r, Color color, int scale)
     {
-        const int glyphW = 8;
-        const int glyphH = 8;
-
-        int textW = text.Length * glyphW * scale;
-        int textH = glyphH * scale;
-
-        int x = r.X + (r.Width - textW) / 2;
-        int y = r.Y + (r.Height - textH) / 2;
-
+        var size = font.Measure(text, scale);
+        int x = r.X + (r.Width - size.X) / 2;
+        int y = r.Y + (r.Height - size.Y) / 2;
         font.Draw(sb, text, new Vector2(x, y), color, scale);
     }
 

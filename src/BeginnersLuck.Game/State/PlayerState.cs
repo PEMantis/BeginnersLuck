@@ -2,20 +2,21 @@ namespace BeginnersLuck.Game.State;
 
 public sealed class PlayerState
 {
-    public int Xp { get; private set; }
-    public int Gold { get; private set; }
+    public int MaxHp { get; set; } = 100;
+    public int Hp { get; set; } = 80;
 
-    public Inventory Inventory { get; } = new();
+    public int Gold { get; set; } = 50;
 
-    public void AddXp(int amount)
+    public int Xp { get; set; } = 0;
+    public PlayerInventory Inventory { get; } = new();
+
+    public void AddXp(int xp)
     {
-        if (amount <= 0) return;
-        Xp += amount;
+        this.Xp += xp;
     }
 
-    public void AddGold(int amount)
+    public void AddGold(int gold)
     {
-        if (amount <= 0) return;
-        Gold += amount;
+        this.Gold += gold;
     }
 }

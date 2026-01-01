@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -6,68 +7,125 @@ namespace BeginnersLuck.Engine.UI;
 public sealed class BitmapFont
 {
     private readonly Texture2D _atlas;
-    private readonly int _glyphW, _glyphH, _cols, _firstChar;
+
+    public int GlyphW { get; }
+    public int GlyphH { get; }
+    public int Cols { get; }
+    public int FirstChar { get; }
+
+    // Tweak these to taste (and now they ACTUALLY work consistently)
+    public int SpacingX { get; set; } = 1;
+    public int SpacingY { get; set; } = 2;
+
+    public int AdvanceX => GlyphW + SpacingX;
+    public int LineH => GlyphH + SpacingY;
 
     public BitmapFont(Texture2D atlas, int glyphW, int glyphH, int cols, int firstChar = 32)
     {
-        _atlas = atlas;
-        _glyphW = glyphW;
-        _glyphH = glyphH;
-        _cols = cols;
-        _firstChar = firstChar;
+        _atlas = atlas ?? throw new ArgumentNullException(nameof(atlas));
+        GlyphW = glyphW;
+        GlyphH = glyphH;
+        Cols = cols;
+        FirstChar = firstChar;
     }
 
     public void Draw(SpriteBatch sb, string text, Vector2 pos, Color color, int scale = 1)
     {
+        if (string.IsNullOrEmpty(text)) return;
+
+        // Snap to integer pixels for crisp point sampling
         int x = (int)pos.X;
         int y = (int)pos.Y;
         int startX = x;
 
-        foreach (char ch in text)
+        for (int i = 0; i < text.Length; i++)
         {
-            if (ch == '\n') { x = startX; y += _glyphH * scale; continue; }
+            char ch = text[i];
 
-            int code = ch - _firstChar;
-            if (code < 0) { x += _glyphW * scale; continue; }
+            if (ch == '\n')
+            {
+                x = startX;
+                y += LineH * scale;
+                continue;
+            }
 
-            int sx = (code % _cols) * _glyphW;
-            int sy = (code / _cols) * _glyphH;
+            int code = ch - FirstChar;
+            if (code < 0)
+            {
+                x += AdvanceX * scale;
+                continue;
+            }
 
-            var src = new Rectangle(sx, sy, _glyphW, _glyphH);
-            var dst = new Rectangle(x, y, _glyphW * scale, _glyphH * scale);
+            int sx = (code % Cols) * GlyphW;
+            int sy = (code / Cols) * GlyphH;
+
+            // Guard against out-of-range glyphs (atlas too small)
+            if (sx < 0 || sy < 0 || sx + GlyphW > _atlas.Width || sy + GlyphH > _atlas.Height)
+            {
+                x += AdvanceX * scale;
+                continue;
+            }
+
+            var src = new Rectangle(sx, sy, GlyphW, GlyphH);
+            var dst = new Rectangle(x, y, GlyphW * scale, GlyphH * scale);
 
             sb.Draw(_atlas, dst, src, color);
-            x += _glyphW * scale;
+
+            x += AdvanceX * scale; // ✅ spacing-aware advance
         }
     }
-    private static Point MeasureText8x8(string text, int scale)
+
+    public Point Measure(string text, int scale = 1)
     {
-        // 8x8 fixed font. Treat unknown chars as width 1.
-        // Handle newlines so you can expand later.
-        int maxLine = 0;
-        int line = 0;
+        if (string.IsNullOrEmpty(text)) return Point.Zero;
+
+        int maxChars = 0;
+        int lineChars = 0;
         int lines = 1;
 
         for (int i = 0; i < text.Length; i++)
         {
             if (text[i] == '\n')
             {
-                maxLine = Math.Max(maxLine, line);
-                line = 0;
+                maxChars = Math.Max(maxChars, lineChars);
+                lineChars = 0;
                 lines++;
             }
             else
             {
-                line++;
+                lineChars++;
             }
         }
-        maxLine = Math.Max(maxLine, line);
+        maxChars = Math.Max(maxChars, lineChars);
 
-        int w = maxLine * 8 * scale;
-        int h = lines * 8 * scale;
+        int w = maxChars * AdvanceX * scale;
+        int h = lines * LineH * scale;
         return new Point(w, h);
     }
 
-    public Point MeasureFixed8x8(string text, int scale = 1) => MeasureText8x8(text, scale);
+    public string TrimToWidth(string text, int maxPixels, int scale = 1)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
 
+        if (Measure(text, scale).X <= maxPixels) return text;
+
+        // Use "..." because it’s safe in ASCII atlases
+        const string ell = "...";
+        int ellW = Measure(ell, scale).X;
+
+        if (ellW >= maxPixels) return ""; // nothing sensible fits
+
+        int maxChars = Math.Max(0, (maxPixels - ellW) / (AdvanceX * scale));
+        if (maxChars <= 0) return ell;
+
+        if (text.Length <= maxChars) return text;
+        return text.Substring(0, maxChars) + ell;
+    }
+
+    public void DrawShadow(SpriteBatch sb, string text, Vector2 pos, Color color, int scale = 1)
+    {
+        // 1px shadow for readability
+        Draw(sb, text, pos + new Vector2(1, 1), Color.Black * 0.6f, scale);
+        Draw(sb, text, pos, color, scale);
+    }
 }

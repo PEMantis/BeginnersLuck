@@ -408,36 +408,70 @@ public sealed class BattleScene : SceneBase
     }
     private void DrawVictorySummary(SpriteBatch sb)
     {
-        int x = _panelInfo.X + 12;
-        int y = _panelInfo.Y + 10;
+        // Inner padding
+        const int pad = 12;
 
-        _s.Font.Draw(sb, "REWARDS", new Vector2(x, y), Color.White * 0.9f, 2);
-        y += 18;
+        var font = _s.Font;
 
-        _s.Font.Draw(sb, $"XP:  {_rewardXp}", new Vector2(x, y), Color.White * 0.85f, 1);
-        y += 12;
+        // Define an inner content rect (safe drawing area)
+        var inner = new Rectangle(
+            _panelInfo.X + pad,
+            _panelInfo.Y + pad,
+            _panelInfo.Width - pad * 2,
+            _panelInfo.Height - pad * 2);
 
-        _s.Font.Draw(sb, $"GOLD:{_rewardGold}", new Vector2(x, y), Color.White * 0.85f, 1);
-        y += 12;
+        int x = inner.X;
+        int y = inner.Y;
 
-        _s.Font.Draw(sb, "LOOT:", new Vector2(x, y), Color.White * 0.75f, 1);
-        y += 12;
+        // Header
+        font.Draw(sb, "REWARDS", new Vector2(x, y), Color.White * 0.9f, scale: 2);
+        y += font.LineH * 2; // <-- correct spacing for scale 2
+
+        // Body lines (scale 1)
+        int lh = font.LineH; // scale 1 line height
+        int maxW = inner.Width;
+
+        // Helper for a single line that must fit
+        void Line(string text, float alpha = 0.85f)
+        {
+            text = text.ToUpperInvariant();
+            text = font.TrimToWidth(text, maxW, scale: 1);
+            font.Draw(sb, text, new Vector2(x, y), Color.White * alpha, scale: 1);
+            y += lh;
+        }
+
+        Line($"XP:   {_rewardXp}", 0.85f);
+        Line($"GOLD: {_rewardGold}", 0.85f);
+
+        y += 1; // tiny breathing room
+        Line("LOOT:", 0.75f);
 
         if (_rewardLoot.Count == 0)
         {
-            _s.Font.Draw(sb, "(NONE)", new Vector2(x, y), Color.White * 0.75f, 1);
+            Line("(NONE)", 0.75f);
             return;
         }
 
-        for (int i = 0; i < _rewardLoot.Count && i < 2; i++)
+        // How many loot lines can we show in the remaining space?
+        int remainingPx = inner.Bottom - y;
+        int maxLines = Math.Max(1, remainingPx / lh);
+
+        int shown = 0;
+        for (int i = 0; i < _rewardLoot.Count && shown < maxLines; i++)
         {
             var (id, qty) = _rewardLoot[i];
             var name = _s.Items.NameOf(id);
-            var line = $"{name} x{qty}";
-            _s.Font.Draw(sb, line.ToUpperInvariant(), new Vector2(x, y), Color.White * 0.75f, 1);
-            y += 12;
+            Line($"{name} x{qty}", 0.75f);
+            shown++;
+        }
+
+        // If we truncated, show a final hint if there's room
+        if (_rewardLoot.Count > shown && (inner.Bottom - y) >= lh)
+        {
+            Line($"(+{_rewardLoot.Count - shown} MORE)", 0.60f);
         }
     }
+
 
 
     private void DrawMenu(SpriteBatch sb, float timeSeconds)
@@ -480,7 +514,7 @@ public sealed class BattleScene : SceneBase
         sb.Draw(_white!, new Rectangle(r.X, r.Y, r.Width, 1), Color.White * 0.25f);
         sb.Draw(_white!, new Rectangle(r.X, r.Bottom - 1, r.Width, 1), Color.White * 0.18f);
 
-        DrawTextCentered8x8(sb, _s.Font, _message, r, Color.White * 0.92f, scale: 1);
+        DrawTextCentered(sb, _s.Font, _message, r, Color.White * 0.92f, scale: 1);
     }
 
     private void DrawBar(SpriteBatch sb, Rectangle r, int value, int max, Color back, Color fill)
@@ -541,6 +575,17 @@ public sealed class BattleScene : SceneBase
 
         font.Draw(sb, text, pos, color, scale);
     }
+
+    private static void DrawTextCentered(SpriteBatch sb, BitmapFont font, string text, Rectangle r, Color color, int scale)
+    {
+        var size = font.Measure(text, scale);
+        var pos = new Vector2(
+            r.X + (r.Width - size.X) * 0.5f,
+            r.Y + (r.Height - size.Y) * 0.5f);
+
+        font.Draw(sb, text, pos, color, scale);
+    }
+
 
     private static Point MeasureText8x8(string text, int scale)
     {
