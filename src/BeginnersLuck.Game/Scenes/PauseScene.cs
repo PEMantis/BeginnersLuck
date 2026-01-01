@@ -1,4 +1,4 @@
-using BeginnersLuck.Engine;
+using System;
 using BeginnersLuck.Engine.Graphics;
 using BeginnersLuck.Engine.Rendering;
 using BeginnersLuck.Engine.Scenes;
@@ -16,20 +16,23 @@ public sealed class PauseScene : SceneBase
 {
     private Texture2D? _white;
 
-    private readonly Rectangle _panel = new(110, 70, 260, 130);
-    private readonly Rectangle _btnResume = new(130, 105, 220, 32);
-    private readonly Rectangle _btnQuit = new(130, 145, 220, 32);
+    private readonly Rectangle _panel        = new(110, 58, 260, 154);
+    private readonly Rectangle _btnResume    = new(130, 92,  220, 32);
+    private readonly Rectangle _btnInventory = new(130, 132, 220, 32);
+    private readonly Rectangle _btnMenu      = new(130, 172, 220, 32);
 
-    private int _focus = 0;
+    // 0 Resume, 1 Inventory, 2 Menu
+    private int _focus;
 
     private readonly GameServices _s;
 
     private KeyboardState _prevKs;
     private GamePadState _prevPad;
+    private bool _eatFirstUpdate = true;
 
     public PauseScene(GameServices s, KeyboardState seedKs, GamePadState seedPad)
     {
-        _s = s;
+        _s = s ?? throw new ArgumentNullException(nameof(s));
         _focus = 0;
         _prevKs = seedKs;
         _prevPad = seedPad;
@@ -52,8 +55,17 @@ public sealed class PauseScene : SceneBase
         var ks = Keyboard.GetState();
         var pad = GamePad.GetState(PlayerIndex.One);
 
-        // Close pause (toggle): Esc / controller Start or Back
-        if (Pressed(ks, Keys.Escape) || Pressed(pad, Buttons.Start) || Pressed(pad, Buttons.Back))
+        // Prevent "press-through" from the key that opened pause
+        if (_eatFirstUpdate)
+        {
+            _eatFirstUpdate = false;
+            _prevKs = ks;
+            _prevPad = pad;
+            return;
+        }
+
+        // Back/close pause: Backspace (keyboard) OR B/Back (controller)
+        if (Pressed(ks, Keys.Back) || Pressed(pad, Buttons.B) || Pressed(pad, Buttons.Back))
         {
             _s.Scenes.Pop();
             _prevKs = ks;
@@ -61,24 +73,37 @@ public sealed class PauseScene : SceneBase
             return;
         }
 
-        // menu nav
-        if (Pressed(ks, Keys.W) || Pressed(ks, Keys.Up) || Pressed(pad, Buttons.DPadUp)) _focus = 0;
-        if (Pressed(ks, Keys.S) || Pressed(ks, Keys.Down) || Pressed(pad, Buttons.DPadDown)) _focus = 1;
+        // Navigate (Up/Down, W/S, DPad)
+        if (Pressed(ks, Keys.Up) || Pressed(ks, Keys.W) || Pressed(pad, Buttons.DPadUp))
+            _focus = Math.Max(0, _focus - 1);
 
-        // select (Enter / A)
+        if (Pressed(ks, Keys.Down) || Pressed(ks, Keys.S) || Pressed(pad, Buttons.DPadDown))
+            _focus = Math.Min(2, _focus + 1);
+
+        // Select (Enter/Space/A)
         if (Pressed(ks, Keys.Enter) || Pressed(ks, Keys.Space) || Pressed(pad, Buttons.A))
         {
             if (_focus == 0)
+            {
                 _s.Scenes.Pop(); // Resume
+            }
+            else if (_focus == 1)
+            {
+                _s.Scenes.Push(new MenuHubScene(_s, ks, pad, startTab: 0));
+            }
             else
-                _s.Scenes.Replace(new BootScene(_s, ks, pad)); // Menu
+            {
+                _s.Scenes.Replace(new BootScene(_s, ks, pad));
+            }
+
+            _prevKs = ks;
+            _prevPad = pad;
+            return;
         }
 
-        // keep prev updated
         _prevKs = ks;
         _prevPad = pad;
     }
-
 
     private bool Pressed(KeyboardState ks, Keys k) => ks.IsKeyDown(k) && !_prevKs.IsKeyDown(k);
     private bool Pressed(GamePadState pad, Buttons b) => pad.IsButtonDown(b) && !_prevPad.IsButtonDown(b);
@@ -92,17 +117,28 @@ public sealed class PauseScene : SceneBase
 
         sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
 
-        // Dim the whole screen (virtual 480x270)
-        sb.Draw(_white, new Rectangle(0, 0, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight), Color.Black * 0.65f);
+        // Dim screen
+        sb.Draw(_white,
+            new Rectangle(0, 0, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight),
+            Color.Black * 0.65f);
 
+        // Panel
         MenuRenderer.DrawPanel(sb, _white, _panel, new Color(20, 20, 40) * 0.98f);
 
-        _s.Font.Draw(sb, "PAUSED", new Vector2(_panel.X + 90, _panel.Y + 18), Color.White, scale: 2);
+        _s.Font.Draw(sb, "PAUSED", new Vector2(_panel.X + 90, _panel.Y + 12), Color.White, scale: 2);
 
-        MenuRenderer.DrawButton(sb, _white, _s.Font, _btnResume, "RESUME", focused: _focus == 0, enabled: true, timeSeconds: t, fontScale: 2);
-        MenuRenderer.DrawButton(sb, _white, _s.Font, _btnQuit, "MENU", focused: _focus == 1, enabled: true, timeSeconds: t, fontScale: 2);
+        MenuRenderer.DrawButton(sb, _white, _s.Font, _btnResume, "RESUME",
+            focused: _focus == 0, enabled: true, timeSeconds: t, fontScale: 2);
 
-        _s.Font.Draw(sb, "ENTER: SELECT   ESC: BACK", new Vector2(_panel.X + 34, _panel.Bottom - 18), Color.White * 0.8f, scale: 1);
+        MenuRenderer.DrawButton(sb, _white, _s.Font, _btnInventory, "INVENTORY",
+            focused: _focus == 1, enabled: true, timeSeconds: t, fontScale: 2);
+
+        MenuRenderer.DrawButton(sb, _white, _s.Font, _btnMenu, "MENU",
+            focused: _focus == 2, enabled: true, timeSeconds: t, fontScale: 2);
+
+        _s.Font.Draw(sb, "ENTER/A: SELECT   BACK/B: RETURN",
+            new Vector2(_panel.X + 30, _panel.Bottom - 16),
+            Color.White * 0.8f, scale: 1);
 
         sb.End();
     }

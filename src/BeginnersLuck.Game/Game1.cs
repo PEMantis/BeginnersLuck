@@ -70,7 +70,23 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var encounterDirector = new EncounterDirector(encounterSource);
         var player = new BeginnersLuck.Game.State.PlayerState();
         var items = BeginnersLuck.Game.Items.DefaultItems.Create();
-        _services = new GameServices(_pixel, _scenes, _fade, _raw, font, rng, encounterDirector, player, items);
+
+        var px = new Texture2D(GraphicsDevice, 1, 1);
+        px.SetData(new[] { Microsoft.Xna.Framework.Color.White });
+
+        _services = new GameServices(
+            pixel: _pixel,
+            scenes: _scenes,
+            fade: _fade,
+            raw: _raw,
+            font: font,
+            pixelWhite: px, // ✅ NEW
+            rng: rng,
+            encounters: encounterDirector,
+            player: player,
+            items: items
+        );
+
 
         _scenes.Configure(GraphicsDevice, Content);
         _scenes.Replace(new Scenes.BootScene(_services));
