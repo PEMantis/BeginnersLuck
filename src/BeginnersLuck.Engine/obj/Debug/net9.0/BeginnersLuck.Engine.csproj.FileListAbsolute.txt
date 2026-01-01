@@ -10,3 +10,4 @@
 /home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/obj/Debug/net9.0/refint/BeginnersLuck.Engine.dll
 /home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/obj/Debug/net9.0/BeginnersLuck.Engine.pdb
 /home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/obj/Debug/net9.0/ref/BeginnersLuck.Engine.dll
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/obj/Debug/net9.0/BeginnersLuck.Engine.sourcelink.json

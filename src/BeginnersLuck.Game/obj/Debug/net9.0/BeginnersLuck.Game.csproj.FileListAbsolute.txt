@@ -36,3 +36,4 @@
 /home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/obj/Debug/net9.0/BeginnersLuck.Game.genruntimeconfig.cache
 /home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/obj/Debug/net9.0/ref/BeginnersLuck.Game.dll
 /home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/bin/Debug/net9.0/ContentRaw/Data/encounters.json
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/obj/Debug/net9.0/BeginnersLuck.Game.sourcelink.json
