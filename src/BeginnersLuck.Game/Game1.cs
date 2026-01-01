@@ -68,7 +68,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var rng = new Random(12345);
         var encounterSource = new BasicEncounterSource();
         var encounterDirector = new EncounterDirector(encounterSource);
-        _services = new GameServices(_pixel, _scenes, _fade, _raw, font, rng, encounterDirector);
+        var player = new BeginnersLuck.Game.State.PlayerState();
+        var items = BeginnersLuck.Game.Items.DefaultItems.Create();
+        _services = new GameServices(_pixel, _scenes, _fade, _raw, font, rng, encounterDirector, player, items);
 
         _scenes.Configure(GraphicsDevice, Content);
         _scenes.Replace(new Scenes.BootScene(_services));

@@ -6,6 +6,8 @@ using BeginnersLuck.Engine.Transitions;
 using BeginnersLuck.Engine.UI;
 using BeginnersLuck.Game.Encounters;
 using BeginnersLuck.Game.World;
+using BeginnersLuck.Game.Items;
+using BeginnersLuck.Game.State;
 
 namespace BeginnersLuck.Game.Services;
 
@@ -23,6 +25,9 @@ public sealed class GameServices
     public EncounterDirector EncounterDirector { get; }
     public ZoneMap Zones { get; set; } = null!; // built after map load (depends on map)
 
+    public PlayerState Player { get; }
+    public ItemDb Items { get; }
+
     public GameServices(
      PixelRenderer pixel,
      SceneManager scenes,
@@ -30,16 +35,19 @@ public sealed class GameServices
      RawContent raw,
      BitmapFont font,
      Random rng,
-     EncounterDirector encounters)
+     EncounterDirector encounters,
+     PlayerState player,
+     ItemDb items)
     {
         Pixel = pixel;
         Scenes = scenes;
         Fade = fade;
         Raw = raw;
         Font = font;
-
         Rng = rng;
         EncounterDirector = encounters;
+        Player = player;
+        Items = items;
     }
 
 }

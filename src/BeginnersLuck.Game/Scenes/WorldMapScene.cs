@@ -47,7 +47,7 @@ public sealed class WorldMapScene : SceneBase
     private float _toastT;
     private float _toastDuration = 0.55f;
     private string _toastText = "";
-    private EncounterDef _toastEncounter;
+    private EncounterDef? _toastEncounter;
     private KeyboardState _toastSeedKs;
     private GamePadState _toastSeedPad;
 
@@ -226,52 +226,30 @@ public sealed class WorldMapScene : SceneBase
 
         var sb = rc.SpriteBatch;
 
-        sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
+        sb.Begin(
+            samplerState: SamplerState.PointClamp,
+            blendState: BlendState.AlphaBlend);
 
-        // Debug panel background
-        sb.Draw(_white, new Rectangle(10, 10, 240, 74), new Color(30, 30, 50) * 0.9f);
-        sb.Draw(_white, new Rectangle(10, 10, 240, 2), Color.White * 0.5f);
+        // HUD panel (top-left)
+        var hud = new Rectangle(8, 8, 190, 34);
+        sb.Draw(_white, hud, new Color(10, 10, 18) * 0.75f);
+        sb.Draw(_white, new Rectangle(hud.X, hud.Y, hud.Width, 1), Color.White * 0.18f);
+        sb.Draw(_white, new Rectangle(hud.X, hud.Bottom - 1, hud.Width, 1), Color.White * 0.12f);
 
-        // ---- Debug overlay: zones + encounter chance ----
-        if (_map != null && _s.Zones != null)
-        {
-            var z = _s.Zones.GetInfo(_playerCell.X, _playerCell.Y);
-            float chance = _s.EncounterDirector.ComputeChancePerStep(z);
-            int cd = _s.EncounterDirector.CooldownRemainingSteps;
+        // Text
+        // (BitmapFont is your 8x8; scale 1 keeps it crisp in 480x270)
+        var gold = _s.Player.Gold;
+        var xp = _s.Player.Xp;
 
-            int y = 16;
-            _s.Font.Draw(sb, $"CELL: {_playerCell.X},{_playerCell.Y}", new Vector2(16, y), Color.White * 0.9f, 1); y += 12;
-            _s.Font.Draw(sb, $"ZONE: {z.Id}", new Vector2(16, y), Color.White * 0.9f, 1); y += 12;
-            _s.Font.Draw(sb, $"DANGER: {z.Danger}", new Vector2(16, y), Color.White * 0.9f, 1); y += 12;
+        _s.Font.Draw(sb, $"GOLD: {gold}", new Vector2(hud.X + 8, hud.Y + 8), Color.White * 0.9f, scale: 1);
+        _s.Font.Draw(sb, $"XP:   {xp}", new Vector2(hud.X + 8, hud.Y + 18), Color.White * 0.9f, scale: 1);
 
-            var pct = (int)(chance * 100f + 0.5f);
-            _s.Font.Draw(sb, $"CHANCE: {pct}%  CD:{cd}", new Vector2(16, y), Color.White * 0.9f, 1);
-        }
-
-        // ---- Encounter toast ----
-        if (_toastActive)
-        {
-            float t = _toastT / MathF.Max(0.001f, _toastDuration);
-
-            // punch-in / punch-out alpha
-            float a;
-            if (t < 0.2f) a = t / 0.2f;
-            else if (t > 0.85f) a = (1f - t) / 0.15f;
-            else a = 1f;
-
-            a = MathHelper.Clamp(a, 0f, 1f);
-
-            var r = new Rectangle(60, 110, 360, 50);
-
-            sb.Draw(_white, r, new Color(10, 10, 18) * (0.85f * a));
-            sb.Draw(_white, new Rectangle(r.X, r.Y, r.Width, 2), Color.White * (0.35f * a));
-            sb.Draw(_white, new Rectangle(r.X, r.Bottom - 2, r.Width, 2), Color.White * (0.25f * a));
-
-            DrawTextCentered8x8(sb, _s.Font, _toastText, r, Color.White * a, scale: 2);
-        }
+        // Optional: debug hint (remove anytime)
+        // _s.Font.Draw(sb, "ESC/START: PAUSE", new Vector2(8, 48), Color.White * 0.5f, 1);
 
         sb.End();
     }
+
 
     private void StartEncounterToast(EncounterDef enc, string text, KeyboardState ks, GamePadState pad)
     {

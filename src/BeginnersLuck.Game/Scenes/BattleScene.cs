@@ -78,6 +78,12 @@ public sealed class BattleScene : SceneBase
     private readonly Rectangle _btnAttack = new(26, 202, 180, 22);
     private readonly Rectangle _btnRun = new(26, 230, 180, 22);
 
+    private bool _rewardsRolled;
+    private bool _rewardsApplied;
+    private int _rewardXp;
+    private int _rewardGold;
+    private readonly System.Collections.Generic.List<(string ItemId, int Qty)> _rewardLoot = new();
+
 
     public BattleScene(GameServices s, EncounterDef encounter, KeyboardState seedKs, GamePadState seedPad)
     {
@@ -219,6 +225,8 @@ public sealed class BattleScene : SceneBase
             }
 
             case Phase.Victory:
+                RollRewardsIfNeeded();
+                ApplyRewardsIfNeeded();
                 _message = "VICTORY!";
                 _messageT = MathF.Max(_messageT, 999f); // keep visible
                 if (PressedConfirm(ks, pad))
@@ -270,62 +278,89 @@ public sealed class BattleScene : SceneBase
         // Background dim
         sb.Draw(_white, new Rectangle(0, 0, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight), Color.Black * 0.75f);
 
-        // Panels
+        // Main panels
         MenuRenderer.DrawPanel(sb, _white, _panelLeft, new Color(18, 18, 34) * 0.98f);
         MenuRenderer.DrawPanel(sb, _white, _panelRight, new Color(18, 18, 34) * 0.98f);
 
-        // Split bottom row into COMMANDS + INFO (classic JRPG layout)
+        // Bottom row: COMMANDS + INFO
         MenuRenderer.DrawPanel(sb, _white, _panelCommands, new Color(12, 12, 20) * 0.98f);
         MenuRenderer.DrawPanel(sb, _white, _panelInfo, new Color(12, 12, 20) * 0.98f);
 
-        // Left: Player
+        // Left/Right content
         DrawPlayerPanel(sb);
-
-        // Right: Enemies
         DrawEnemiesPanel(sb);
 
-        // Bottom: Menu buttons (COMMANDS panel)
-        bool inMenu = _phase == Phase.PlayerSelect;
+        // --- Bottom: Commands or Continue Hint ---
+        bool showCommands = _phase == Phase.PlayerSelect;
 
-        MenuRenderer.DrawButton(
-            sb, _white, _s.Font, _btnAttack, "ATTACK",
-            focused: inMenu && _focus == 0,
-            enabled: inMenu,
-            timeSeconds: t,
-            fontScale: 2);
-
-        MenuRenderer.DrawButton(
-            sb, _white, _s.Font, _btnRun, "RUN",
-            focused: inMenu && _focus == 1,
-            enabled: inMenu,
-            timeSeconds: t,
-            fontScale: 2);
-
-        // Bottom-right: prompt + context (INFO panel)
-        string prompt =
-            _phase switch
-            {
-                Phase.Intro => "ENTER/A: START",
-                Phase.PlayerSelect => "ENTER/A: SELECT",
-                Phase.Victory => "ENTER/A: CONTINUE",
-                Phase.Defeat => "ENTER/A: CONTINUE",
-                Phase.Exit => "ENTER/A: LEAVE",
-                _ => ""
-            };
-
-        if (!string.IsNullOrWhiteSpace(prompt))
+        if (showCommands)
         {
+            MenuRenderer.DrawButton(
+                sb, _white, _s.Font, _btnAttack, "ATTACK",
+                focused: _focus == 0,
+                enabled: true,
+                timeSeconds: t,
+                fontScale: 2);
+
+            MenuRenderer.DrawButton(
+                sb, _white, _s.Font, _btnRun, "RUN",
+                focused: _focus == 1,
+                enabled: true,
+                timeSeconds: t,
+                fontScale: 2);
+        }
+        else
+        {
+            // Commands panel becomes a “Continue” area when not selecting actions
+            var hint =
+                _phase switch
+                {
+                    Phase.Intro => "ENTER/A: START",
+                    Phase.Victory => "ENTER/A: CONTINUE",
+                    Phase.Defeat => "ENTER/A: CONTINUE",
+                    Phase.Exit => "ENTER/A: LEAVE",
+                    _ => "ENTER/A: CONTINUE"
+                };
+
             _s.Font.Draw(
                 sb,
-                prompt,
-                new Vector2(_panelInfo.X + 12, _panelInfo.Y + 22),
+                hint,
+                new Vector2(_panelCommands.X + 18, _panelCommands.Y + 24),
                 Color.White * 0.75f,
-                1
-            );
+                1);
         }
 
-        // Optional: show a short hint line above prompt (nice for later)
-        // _s.Font.Draw(sb, "TIP: ATTACK TO WIN", new Vector2(_panelInfo.X + 12, _panelInfo.Y + 10), Color.White * 0.45f, 1);
+        // --- Bottom-right: Info panel content ---
+        if (_phase == Phase.Victory)
+        {
+            // Victory summary (XP / Gold / Loot)
+            DrawVictorySummary(sb);
+        }
+        else
+        {
+            // Normal prompt / context
+            string prompt =
+                _phase switch
+                {
+                    Phase.Intro => "DEFEAT THEM!",
+                    Phase.PlayerSelect => "CHOOSE AN ACTION",
+                    Phase.PlayerResolve => "YOU ATTACK...",
+                    Phase.EnemyResolve => "ENEMY ATTACKS...",
+                    Phase.Defeat => "YOU FELL...",
+                    Phase.Exit => "LEAVING BATTLE...",
+                    _ => ""
+                };
+
+            if (!string.IsNullOrWhiteSpace(prompt))
+            {
+                _s.Font.Draw(
+                    sb,
+                    prompt.ToUpperInvariant(),
+                    new Vector2(_panelInfo.X + 12, _panelInfo.Y + 22),
+                    Color.White * 0.75f,
+                    1);
+            }
+        }
 
         // Message toast (top-center)
         if (_messageT > 0f)
@@ -333,6 +368,7 @@ public sealed class BattleScene : SceneBase
 
         sb.End();
     }
+
 
 
     private void DrawPlayerPanel(SpriteBatch sb)
@@ -370,6 +406,39 @@ public sealed class BattleScene : SceneBase
             if (y > _panelRight.Bottom - 18) break;
         }
     }
+    private void DrawVictorySummary(SpriteBatch sb)
+    {
+        int x = _panelInfo.X + 12;
+        int y = _panelInfo.Y + 10;
+
+        _s.Font.Draw(sb, "REWARDS", new Vector2(x, y), Color.White * 0.9f, 2);
+        y += 18;
+
+        _s.Font.Draw(sb, $"XP:  {_rewardXp}", new Vector2(x, y), Color.White * 0.85f, 1);
+        y += 12;
+
+        _s.Font.Draw(sb, $"GOLD:{_rewardGold}", new Vector2(x, y), Color.White * 0.85f, 1);
+        y += 12;
+
+        _s.Font.Draw(sb, "LOOT:", new Vector2(x, y), Color.White * 0.75f, 1);
+        y += 12;
+
+        if (_rewardLoot.Count == 0)
+        {
+            _s.Font.Draw(sb, "(NONE)", new Vector2(x, y), Color.White * 0.75f, 1);
+            return;
+        }
+
+        for (int i = 0; i < _rewardLoot.Count && i < 2; i++)
+        {
+            var (id, qty) = _rewardLoot[i];
+            var name = _s.Items.NameOf(id);
+            var line = $"{name} x{qty}";
+            _s.Font.Draw(sb, line.ToUpperInvariant(), new Vector2(x, y), Color.White * 0.75f, 1);
+            y += 12;
+        }
+    }
+
 
     private void DrawMenu(SpriteBatch sb, float timeSeconds)
     {
@@ -496,4 +565,41 @@ public sealed class BattleScene : SceneBase
         maxLine = Math.Max(maxLine, line);
         return new Point(maxLine * 8 * scale, lines * 8 * scale);
     }
+
+    private void RollRewardsIfNeeded()
+    {
+        if (_rewardsRolled) return;
+        _rewardsRolled = true;
+
+        _rewardXp = _encounter.Xp.Roll(_s.Rng);
+        _rewardGold = _encounter.Gold.Roll(_s.Rng);
+
+        _rewardLoot.Clear();
+
+        foreach (var d in _encounter.Loot)
+        {
+            int roll = _s.Rng.Next(1, 101);
+            if (roll > d.ChancePercent) continue;
+
+            int qty = d.MinQty;
+            if (d.MaxQty > d.MinQty)
+                qty = _s.Rng.Next(d.MinQty, d.MaxQty + 1);
+
+            _rewardLoot.Add((d.ItemId, qty));
+        }
+    }
+
+    private void ApplyRewardsIfNeeded()
+    {
+        if (_rewardsApplied) return;
+        _rewardsApplied = true;
+
+        _s.Player.AddXp(_rewardXp);
+        _s.Player.AddGold(_rewardGold);
+
+        foreach (var (id, qty) in _rewardLoot)
+            _s.Player.Inventory.Add(id, qty);
+    }
+
+
 }
