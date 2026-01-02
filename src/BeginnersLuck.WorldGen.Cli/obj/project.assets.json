@@ -1,0 +1,135 @@
+{
+  "version": 3,
+  "targets": {
+    "net9.0": {
+      "SixLabors.ImageSharp/3.1.12": {
+        "type": "package",
+        "compile": {
+          "lib/net6.0/SixLabors.ImageSharp.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net6.0/SixLabors.ImageSharp.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "build/SixLabors.ImageSharp.props": {}
+        }
+      },
+      "BeginnersLuck.WorldGen/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v9.0",
+        "compile": {
+          "bin/placeholder/BeginnersLuck.WorldGen.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/BeginnersLuck.WorldGen.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "SixLabors.ImageSharp/3.1.12": {
+      "sha512": "iAg6zifihXEFS/t7fiHhZBGAdCp3FavsF4i2ZIDp0JfeYeDVzvmlbY1CNhhIKimaIzrzSi5M/NBFcWvZT2rB/A==",
+      "type": "package",
+      "path": "sixlabors.imagesharp/3.1.12",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE",
+        "build/SixLabors.ImageSharp.props",
+        "lib/net6.0/SixLabors.ImageSharp.dll",
+        "lib/net6.0/SixLabors.ImageSharp.xml",
+        "sixlabors.imagesharp.128.png",
+        "sixlabors.imagesharp.3.1.12.nupkg.sha512",
+        "sixlabors.imagesharp.nuspec"
+      ]
+    },
+    "BeginnersLuck.WorldGen/1.0.0": {
+      "type": "project",
+      "path": "../BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj",
+      "msbuildProject": "../BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj"
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net9.0": [
+      "BeginnersLuck.WorldGen >= 1.0.0",
+      "SixLabors.ImageSharp >= 3.1.12"
+    ]
+  },
+  "packageFolders": {
+    "/home/perry-davis/.nuget/packages/": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.WorldGen.Cli/BeginnersLuck.WorldGen.Cli.csproj",
+      "projectName": "BeginnersLuck.WorldGen.Cli",
+      "projectPath": "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.WorldGen.Cli/BeginnersLuck.WorldGen.Cli.csproj",
+      "packagesPath": "/home/perry-davis/.nuget/packages/",
+      "outputPath": "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.WorldGen.Cli/obj/",
+      "projectStyle": "PackageReference",
+      "configFilePaths": [
+        "/home/perry-davis/.nuget/NuGet/NuGet.Config"
+      ],
+      "originalTargetFrameworks": [
+        "net9.0"
+      ],
+      "sources": {
+        "/home/perry-davis/.dotnet/library-packs": {},
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "projectReferences": {
+            "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj": {
+              "projectPath": "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj"
+            }
+          }
+        }
+      },
+      "warningProperties": {
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "9.0.300"
+    },
+    "frameworks": {
+      "net9.0": {
+        "targetAlias": "net9.0",
+        "dependencies": {
+          "SixLabors.ImageSharp": {
+            "target": "Package",
+            "version": "[3.1.12, )"
+          }
+        },
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "frameworkReferences": {
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          }
+        },
+        "runtimeIdentifierGraphPath": "/home/perry-davis/.dotnet/sdk/9.0.308/PortableRuntimeIdentifierGraph.json"
+      }
+    }
+  }
+}
