@@ -193,4 +193,29 @@ public static class MenuRenderer
         sb.GraphicsDevice.ScissorRectangle = previous;
     }
 
+    public static void BeginScissor(SpriteBatch sb, GraphicsDevice gd, Rectangle scissorRect)
+    {
+        // End the current Begin, then restart with scissor enabled.
+        sb.End();
+
+        var prev = gd.ScissorRectangle;
+        gd.ScissorRectangle = scissorRect;
+
+        sb.Begin(
+            samplerState: SamplerState.PointClamp,
+            blendState: BlendState.AlphaBlend,
+            rasterizerState: new RasterizerState { ScissorTestEnable = true });
+
+        // NOTE: caller must restore scissor + begin state after drawing clipped content
+    }
+
+    public static void EndScissor(SpriteBatch sb, GraphicsDevice gd, Rectangle prevScissor)
+    {
+        sb.End();
+        gd.ScissorRectangle = prevScissor;
+
+        sb.Begin(
+            samplerState: SamplerState.PointClamp,
+            blendState: BlendState.AlphaBlend);
+    }
 }

@@ -3,6 +3,7 @@ using BeginnersLuck.Engine.Update;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using BeginnersLuck.Engine.UI;
+using BeginnersLuck.Engine.Input;
 
 namespace BeginnersLuck.Game.Menu;
 
@@ -17,7 +18,12 @@ public sealed class CharacterPage : IMenuPage
 
     public void Update(GameServices s, in UpdateContext uc)
     {
-        // Nothing interactive yet (later: stats list, equipment, etc.)
+        if (uc.Actions.Pressed(uc.Input, Microsoft.Xna.Framework.Input.Keys.F1))
+            s.Player.AddXp(10);
+
+        if (uc.Actions.Pressed(uc.Input, Microsoft.Xna.Framework.Input.Keys.F2))
+            s.Player.AddXp(50);
+
     }
 
     public void Draw(GameServices s, SpriteBatch sb, Rectangle contentRect, float timeSeconds)
@@ -66,23 +72,30 @@ public sealed class CharacterPage : IMenuPage
             fill: new Color(80, 220, 120));
         y += 20;
 
-        // XP / Level
-        s.UiFont.Draw(sb, $"LV  {s.Player.Level}", new Vector2(x, y), Color.White * 0.85f, 1);
-        y += s.UiFont.LineHeight(1) + 6;
-
+        var xpBar = new Rectangle(x, y + s.UiFont.LineHeight(1) + 6, r.Width - 24, 12);
         int need = s.Player.XpToNextLevel();
-        s.UiFont.Draw(sb, $"XP  {s.Player.Xp}/{need}", new Vector2(x, y), Color.White * 0.75f, 1);
-        y += s.UiFont.LineHeight(1) + 6;
+        int cur = s.Player.XpIntoLevel();
 
-        var xpBar = new Rectangle(x, y, r.Width - 24, 12);
-        int cur = s.Player.Xp;
+        s.UiFont.Draw(sb, $"LV  {s.Player.Level}", new Vector2(x, y), Color.White * 0.85f, 1);
+        // ...
+        s.UiFont.Draw(sb, $"XP  {cur}/{need}", new Vector2(x, y), Color.White * 0.75f, 1);
+
         DrawBar(sb, white, xpBar, cur, need,
             back: new Color(30, 30, 45),
             fill: new Color(120, 160, 255));
+
     }
 
     private static void DrawSummary(GameServices s, SpriteBatch sb, Texture2D white, Rectangle r)
     {
+        var gd = sb.GraphicsDevice;
+        var prev = gd.ScissorRectangle;
+
+        // shrink a bit so outline stays visible
+        var clip = new Rectangle(r.X + 6, r.Y + 6, r.Width - 12, r.Height - 12);
+
+        MenuRenderer.BeginScissor(sb, gd, clip);
+
         int x = r.X + 12;
         int y = r.Y + 12;
 
@@ -103,8 +116,12 @@ public sealed class CharacterPage : IMenuPage
         s.UiFont.Draw(sb, $"TOTAL: {total}", new Vector2(x, y), Color.White * 0.75f, 1);
         y += s.UiFont.LineHeight(1) + 12;
 
-        // Light placeholder
-        s.UiFont.Draw(sb, "EQUIPMENT COMING SOON.", new Vector2(x, y), Color.White * 0.55f, 1);
+        string line = "EQUIPMENT COMING SOON.";
+        int maxW = r.Width - 24;
+        line = s.UiFont.TrimToWidth(line, maxW, 1);
+        s.UiFont.Draw(sb, line, new Vector2(x, y), Color.White * 0.55f, 1);
+
+        MenuRenderer.EndScissor(sb, gd, prev);
     }
 
     private static void DrawBar(SpriteBatch sb, Texture2D white, Rectangle r, int value, int max, Color back, Color fill)

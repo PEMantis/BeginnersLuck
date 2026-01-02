@@ -12,15 +12,6 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace BeginnersLuck.Game.Scenes;
 
-/// <summary>
-/// Reusable "menu page" scene:
-/// - dim background
-/// - main panel + title
-/// - optional footer hint
-/// - optional toast
-/// - safe "eat first update" to prevent press-through
-/// - default Cancel closes (Pop)
-/// </summary>
 public abstract class PanelSceneBase : SceneBase
 {
     protected readonly GameServices S;
@@ -28,17 +19,15 @@ public abstract class PanelSceneBase : SceneBase
 
     protected bool EatFirstUpdate = true;
 
-    // Main panel layout
     protected Rectangle PanelRect;
     protected int PanelPadding = 14;
 
-    // Title + footer
     protected string TitleText = "";
     protected int TitleScale = 2;
+
     protected bool ShowFooterHint = true;
     protected string FooterHint = "ENTER/A: SELECT   BACK/B: RETURN";
 
-    // Toast
     protected string ToastText = "";
     protected float ToastT = 0f;
 
@@ -61,7 +50,6 @@ public abstract class PanelSceneBase : SceneBase
     public override void Unload()
     {
         OnUnload();
-
         White?.Dispose();
         White = null;
     }
@@ -78,7 +66,6 @@ public abstract class PanelSceneBase : SceneBase
         float dt = (float)uc.GameTime.ElapsedGameTime.TotalSeconds;
         if (ToastT > 0f) ToastT = MathF.Max(0f, ToastT - dt);
 
-        // Default Cancel behavior: pop
         if (uc.Actions.Pressed(uc.Input, GameAction.Cancel))
         {
             uc.Actions.ConsumeAll();
@@ -94,10 +81,12 @@ public abstract class PanelSceneBase : SceneBase
         if (White == null) return;
 
         var sb = rc.SpriteBatch;
-        sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend, rasterizerState: ScissorRaster);
 
-        // Dim background
-        sb.Draw(White,
+        sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
+
+        // ✅ Dim the entire INTERNAL surface (virtual resolution)
+        sb.Draw(
+            White,
             new Rectangle(0, 0, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight),
             Color.Black * 0.70f);
 
@@ -107,20 +96,15 @@ public abstract class PanelSceneBase : SceneBase
         // Title
         if (!string.IsNullOrWhiteSpace(TitleText))
         {
-            // Title is centered in panel top band
             var titleSize = S.TitleFont.Measure(TitleText, TitleScale);
             int tx = PanelRect.X + (PanelRect.Width - titleSize.X) / 2;
             int ty = PanelRect.Y + 10;
-
             S.TitleFont.DrawShadow(sb, TitleText.ToUpperInvariant(), new Vector2(tx, ty), Color.White, TitleScale);
         }
 
-        // Content area (inside padding, below title)
         var content = ContentRect();
-
         DrawPanelContent(sb, content, rc);
 
-        // Footer hint
         if (ShowFooterHint && !string.IsNullOrWhiteSpace(FooterHint))
         {
             var footerSize = S.UiFont.Measure(FooterHint, 1);
@@ -129,7 +113,6 @@ public abstract class PanelSceneBase : SceneBase
             S.UiFont.Draw(sb, FooterHint.ToUpperInvariant(), new Vector2(fx, fy), Color.White * 0.75f, 1);
         }
 
-        // Toast overlay
         if (ToastT > 0f && !string.IsNullOrWhiteSpace(ToastText))
             DrawToast(sb, PanelRect);
 
@@ -138,8 +121,7 @@ public abstract class PanelSceneBase : SceneBase
 
     protected Rectangle ContentRect()
     {
-        // Title band is ~ (TitleScale * line height) + spacing
-        int titleBand = 10 + (S.TitleFont.LineHeight(TitleScale)) + 10;
+        int titleBand = 10 + S.TitleFont.LineHeight(TitleScale) + 10;
         int bottomBand = ShowFooterHint ? 24 : 10;
 
         return new Rectangle(
@@ -156,32 +138,19 @@ public abstract class PanelSceneBase : SceneBase
         ToastT = seconds;
     }
 
-    protected void UpdateToast(float dt)
-    {
-        if (ToastT > 0f) ToastT = MathF.Max(0f, ToastT - dt);
-    }
-
     protected void DrawToast(SpriteBatch sb, Rectangle panelRect)
     {
         if (ToastT <= 0f || White == null) return;
 
-        // simple centered toast just under the title area
         var r = new Rectangle(panelRect.X + 80, panelRect.Y + 44, panelRect.Width - 160, 20);
         sb.Draw(White, r, new Color(10, 10, 18) * 0.88f);
-        MenuRenderer.DrawOutline(sb, White, r, 1, Microsoft.Xna.Framework.Color.White * 0.25f);
+        MenuRenderer.DrawOutline(sb, White, r, 1, Color.White * 0.25f);
 
         var size = S.UiFont.Measure(ToastText, 1);
-        var pos = new Microsoft.Xna.Framework.Vector2(r.X + (r.Width - size.X) / 2, r.Y + 3);
-        S.UiFont.Draw(sb, ToastText, pos, Microsoft.Xna.Framework.Color.White * 0.92f, 1);
+        var pos = new Vector2(r.X + (r.Width - size.X) / 2, r.Y + 3);
+        S.UiFont.Draw(sb, ToastText, pos, Color.White * 0.92f, 1);
     }
 
-    // PanelSceneBase (field)
-    private static readonly RasterizerState ScissorRaster = new RasterizerState
-    {
-        ScissorTestEnable = true
-    };
-
-    // Hooks
     protected virtual void OnLoad(GraphicsDevice graphicsDevice, ContentManager content) { }
     protected virtual void OnUnload() { }
     protected abstract void OnUpdate(UpdateContext uc);

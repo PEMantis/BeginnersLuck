@@ -4,63 +4,73 @@ namespace BeginnersLuck.Game.State;
 
 public sealed class PlayerState
 {
+    public int Level { get; private set; } = 1;
+
     public int MaxHp { get; set; } = 100;
     public int Hp { get; set; } = 80;
 
     public int Gold { get; set; } = 50;
 
-    public int Level { get; private set; } = 1;
     public int Xp { get; private set; } = 0;
-
     public PlayerInventory Inventory { get; } = new();
 
-    // --- XP curve tuning (nice prototype defaults) ---
-    // XP to go from level L -> L+1: A * L^P
-    private const int XpA = 60;          // base
-    private const double XpP = 2.2;      // growth
+    // --- XP CURVE (tune these) ---
+    private const int BaseXp = 30;     // XP needed from Lv1->Lv2 baseline
+    private const int Growth = 10;     // extra growth per level^2 (quadratic)
 
     public int XpToNextLevel()
-        => XpForLevel(Level);
-
-    public int XpForLevel(int level)
     {
-        level = Math.Max(1, level);
-        return (int)MathF.Round((float)(XpA * Math.Pow(level, XpP)));
+        // XP required to go from current Level to Level+1
+        // Example: L1: 30+10*1 = 40, L2: 30+10*4 = 70, L3: 30+10*9 = 120 ...
+        return BaseXp + Growth * (Level * Level);
     }
 
-    public float XpProgress01()
+    public int XpIntoLevel()
+        => Xp - TotalXpForLevel(Level);
+
+    public int TotalXpForLevel(int level)
     {
-        int need = XpToNextLevel();
-        if (need <= 0) return 1f;
-        return Math.Clamp(Xp / (float)need, 0f, 1f);
+        // Total XP required to *reach* "level" (level 1 => 0 XP)
+        // Sum_{k=1..level-1} (BaseXp + Growth*k^2)
+        if (level <= 1) return 0;
+
+        int total = 0;
+        for (int k = 1; k <= level - 1; k++)
+            total += BaseXp + Growth * (k * k);
+
+        return total;
     }
 
-    public void AddXp(int xp)
+    public int TotalXpForNextLevel()
+        => TotalXpForLevel(Level + 1);
+
+    public int AddXp(int amount)
     {
-        if (xp <= 0) return;
+        if (amount <= 0) return 0;
 
-        Xp += xp;
+        Xp += amount;
 
-        // Level up loop
-        while (Xp >= XpToNextLevel())
+        int levelsGained = 0;
+        while (Xp >= TotalXpForNextLevel())
         {
-            Xp -= XpToNextLevel();
-            LevelUp();
+            Level++;
+            levelsGained++;
+            OnLevelUp();
         }
+
+        return levelsGained;
     }
 
-    private void LevelUp()
+    private void OnLevelUp()
     {
-        Level++;
-
-        // v1: small, sane bumps
+        // v1: simple progression
         MaxHp += 5;
-        Hp = MaxHp; // full heal on level
+        Hp = Math.Min(MaxHp, Hp + 5); // little heal bump
+        // later: stats, skill points, etc.
     }
 
     public void AddGold(int gold) => Gold += gold;
 
-    public void Heal(int amount) => Hp = Math.Min(MaxHp, Hp + Math.Max(0, amount));
-
-    public void Damage(int amount) => Hp = Math.Max(0, Hp - Math.Max(0, amount));
+    public void Heal(int amount) => Hp = Math.Min(MaxHp, Hp + amount);
+    public void Damage(int amount) => Hp = Math.Max(0, Hp - amount);
 }
