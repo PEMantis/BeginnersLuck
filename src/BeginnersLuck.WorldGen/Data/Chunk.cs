@@ -15,6 +15,9 @@ public sealed class Chunk
     public TileId[] Terrain { get; }
     public TileFlags[] Flags { get; }
 
+    public BiomeId[] Biome { get; }
+    public ushort[] Region { get; }
+
     public Chunk(int chunkSize, int cx, int cy)
     {
         ChunkSize = chunkSize;
@@ -28,6 +31,8 @@ public sealed class Chunk
 
         Terrain = new TileId[n];
         Flags = new TileFlags[n];
+        Biome = new BiomeId[n];
+        Region = new ushort[n];
     }
 
     public int Index(int lx, int ly) => (ly * ChunkSize) + lx;

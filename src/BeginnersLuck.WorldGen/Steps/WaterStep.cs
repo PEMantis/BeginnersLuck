@@ -37,6 +37,8 @@ public sealed class WaterStep : IWorldGenStep
                 break;
             }
         }
+        
+        context.Set("SeaLevel", seaLevel);
 
         // Optional: split water into shallow/deep based on distance below sea level.
         int deepCutoff = Math.Max(0, seaLevel - 18); // tweak later

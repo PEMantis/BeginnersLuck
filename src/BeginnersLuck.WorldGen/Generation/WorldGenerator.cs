@@ -26,15 +26,25 @@ public sealed class WorldGenerator : IWorldGenerator
         var ctx = new WorldGenContext(request, map);
 
         var pipeline = new WorldGenPipeline()
-            .Add(new ElevationStep())
-            .Add(new ClimateStep())
-            .Add(new WaterStep())
-            .Add(new TerrainStep())
-            // Later:
-            // .Add(new RiverStep())
-            // .Add(new PoiStep())
-            // .Add(new RoadsStep())
-            ;
+         .Add(new ElevationStep())
+         .Add(new ElevationCurveStep())
+         .Add(new ClimateStep())
+         .Add(new WaterStep())
+         .Add(new CoastStep())
+         .Add(new TerrainStep())
+         .Add(new RiverSourcesStep())
+         .Add(new RiverStep())
+        // 1) erosion improves elevation around rivers
+        .Add(new ValleyErosionStep())
+
+        // 2) biomes depend on final-ish elevation, moisture, temp, coast
+        .Add(new BiomeStep())
+
+        // 3) regions depend on final land/water
+        .Add(new RegionStep())
+
+        // 4) towns depend on rivers, coast, biomes, regions
+        .Add(new TownPlacementStep());
 
         pipeline.Run(ctx);
         return map;
