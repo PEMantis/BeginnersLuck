@@ -94,7 +94,7 @@ public abstract class PanelSceneBase : SceneBase
         if (White == null) return;
 
         var sb = rc.SpriteBatch;
-        sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
+        sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend, rasterizerState: ScissorRaster);
 
         // Dim background
         sb.Draw(White,
@@ -174,6 +174,12 @@ public abstract class PanelSceneBase : SceneBase
         var pos = new Microsoft.Xna.Framework.Vector2(r.X + (r.Width - size.X) / 2, r.Y + 3);
         S.UiFont.Draw(sb, ToastText, pos, Microsoft.Xna.Framework.Color.White * 0.92f, 1);
     }
+
+    // PanelSceneBase (field)
+    private static readonly RasterizerState ScissorRaster = new RasterizerState
+    {
+        ScissorTestEnable = true
+    };
 
     // Hooks
     protected virtual void OnLoad(GraphicsDevice graphicsDevice, ContentManager content) { }

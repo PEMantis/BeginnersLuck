@@ -140,39 +140,38 @@ public sealed class MenuHubScene : PanelSceneBase
     }
 
 
-
     protected override void DrawPanelContent(SpriteBatch sb, Rectangle content, RenderContext rc)
     {
         if (White == null || _pages.Count == 0) return;
 
         float t = (float)rc.GameTime.TotalGameTime.TotalSeconds;
 
-        // Split content into left tabs + right page
         int gap = 10;
         int tabsW = 190;
 
         _tabsRect = new Rectangle(content.X, content.Y, tabsW, content.Height);
         _contentRect = new Rectangle(content.X + tabsW + gap, content.Y, content.Width - tabsW - gap, content.Height);
 
-        // Backgrounds
+        // Backgrounds + outlines (not clipped is fine)
         sb.Draw(White, _tabsRect, new Color(10, 10, 18) * 0.35f);
         sb.Draw(White, _contentRect, new Color(10, 10, 18) * 0.25f);
 
-        // Focus outline cues
         var tabsOutline = _focusTabs ? Color.White * 0.55f : Color.White * 0.18f;
         var pageOutline = !_focusTabs ? Color.White * 0.55f : Color.White * 0.18f;
 
         MenuRenderer.DrawOutline(sb, White, _tabsRect, 2, tabsOutline);
         MenuRenderer.DrawOutline(sb, White, _contentRect, 2, pageOutline);
 
-        // Tabs list
+        // ---------- TABS: CLIPPED ----------
+        var prev = MenuRenderer.PushScissor(sb, _tabsRect);
+
         int rowH = 24;
         int y = _tabsRect.Y + 12;
 
         for (int i = 0; i < _pages.Count; i++)
         {
             bool sel = i == _tabIndex;
-            bool active = sel && _focusTabs; // tabs focus glow
+            bool active = sel && _focusTabs;
 
             if (sel)
             {
@@ -191,7 +190,12 @@ public sealed class MenuHubScene : PanelSceneBase
             y += rowH;
         }
 
-        // Page header
+        MenuRenderer.PopScissor(sb, prev);
+
+        // ---------- PAGE AREA: CLIPPED ----------
+        prev = MenuRenderer.PushScissor(sb, _contentRect);
+
+        // Page header (also clipped now)
         S.TitleFont.Draw(
             sb,
             _pages[_tabIndex].Title.ToUpperInvariant(),
@@ -199,7 +203,6 @@ public sealed class MenuHubScene : PanelSceneBase
             Color.White * 0.90f,
             2);
 
-        // Page inner content rect (below header)
         var inner = new Rectangle(
             _contentRect.X + 10,
             _contentRect.Y + 36,
@@ -207,5 +210,8 @@ public sealed class MenuHubScene : PanelSceneBase
             _contentRect.Height - 46);
 
         _pages[_tabIndex].Draw(S, sb, inner, t);
+
+        MenuRenderer.PopScissor(sb, prev);
     }
+
 }

@@ -175,6 +175,22 @@ public static class MenuRenderer
         sb.Draw(white, thumb, Color.White * (alpha * 0.55f));
     }
 
+    public static Rectangle PushScissor(SpriteBatch sb, Rectangle clip)
+    {
+        var gd = sb.GraphicsDevice;
+        var prev = gd.ScissorRectangle;
 
+        // Scissor must be within the current viewport/backbuffer
+        var vp = gd.Viewport.Bounds;
+        clip = Rectangle.Intersect(vp, clip);
+
+        gd.ScissorRectangle = Rectangle.Intersect(prev, clip);
+        return prev;
+    }
+
+    public static void PopScissor(SpriteBatch sb, Rectangle previous)
+    {
+        sb.GraphicsDevice.ScissorRectangle = previous;
+    }
 
 }
