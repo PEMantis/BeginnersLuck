@@ -14,6 +14,12 @@ namespace BeginnersLuck.Game.Scenes;
 
 public sealed class MenuHubScene : PanelSceneBase
 {
+    private enum HubFocus
+    {
+        Tabs,
+        Page
+    }
+
     private readonly List<IMenuPage> _pages = new();
     private int _tabIndex;
 
@@ -23,6 +29,7 @@ public sealed class MenuHubScene : PanelSceneBase
     // Layout inside ContentRect()
     private Rectangle _tabsRect;
     private Rectangle _contentRect;
+    private HubFocus _focus = HubFocus.Tabs;
 
     public MenuHubScene(GameServices s, int startTab = 0)
         : base(
@@ -33,17 +40,19 @@ public sealed class MenuHubScene : PanelSceneBase
         _tabIndex = startTab;
 
         TitleScale = 2;
-        PanelPadding = 14;
+            PanelPadding = 14;
 
-        FooterHint = "TAB/START: TOGGLE   LB/RB: TAB   BACK/B: CLOSE";
-        ShowFooterHint = true;
+            FooterHint = _focusTabs
+        ? "UP/DOWN: TAB   ENTER/A: OPEN   BACK/B: CLOSE"
+        : "UP/DOWN: MOVE   BACK/B: TABS   ENTER/A: USE";
+            ShowFooterHint = true;
     }
 
     protected override void OnLoad(GraphicsDevice graphicsDevice, Microsoft.Xna.Framework.Content.ContentManager content)
     {
         _pages.Clear();
         _pages.Add(new InventoryPage());
-        _pages.Add(new StubPage("CHARACTER", "Stats + equipment later."));
+        _pages.Add(new CharacterPage());
         _pages.Add(new StubPage("SKILLS", "Active + passive skills later."));
         _pages.Add(new StubPage("MAGIC", "Spells, mana, spellbook later."));
         _pages.Add(new StubPage("JOURNAL", "Quests + notes later."));
@@ -52,6 +61,8 @@ public sealed class MenuHubScene : PanelSceneBase
         _pages[_tabIndex].OnEnter(S);
 
         _focusTabs = true;
+        _focus = HubFocus.Tabs;
+
     }
 
     protected override void OnUnload()
@@ -66,57 +77,43 @@ public sealed class MenuHubScene : PanelSceneBase
     {
         if (_pages.Count == 0) return;
 
-        // Toggle focus (Tab / Start) any time
-        if (uc.Actions.Pressed(uc.Input, GameAction.Menu))
-        {
-            _focusTabs = !_focusTabs;
-            uc.Actions.ConsumeAll();
-            return;
-        }
-        FooterHint = _pages[_tabIndex].FooterHint;
-
-        // Shoulder tab switching works in either focus (controller-first feel)
-        bool tabLeft  = uc.Actions.Pressed(uc.Input, Keys.Q) || uc.Actions.Pressed(uc.Input, Buttons.LeftShoulder);
-        bool tabRight = uc.Actions.Pressed(uc.Input, Keys.E) || uc.Actions.Pressed(uc.Input, Buttons.RightShoulder);
-        if (tabLeft || tabRight)
-        {
-            int prev = _tabIndex;
-            _tabIndex = tabLeft
-                ? Math.Max(0, _tabIndex - 1)
-                : Math.Min(_pages.Count - 1, _tabIndex + 1);
-
-            if (_tabIndex != prev)
-            {
-                _pages[prev].OnExit(S);
-                _pages[_tabIndex].OnEnter(S);
-            }
-
-            // Avoid LB/RB also triggering something inside the page that frame
-            uc.Actions.ConsumeAll();
-            return;
-        }
-
-        // Cancel behavior depends on focus
+        // --- Cancel behavior depends on focus ---
         if (uc.Actions.Pressed(uc.Input, GameAction.Cancel))
         {
-            if (_focusTabs)
+            if (_focus == HubFocus.Page)
             {
-                // Close hub
-                uc.Actions.ConsumeAll();
-                S.Scenes.Pop();
-                return;
-            }
-            else
-            {
-                // Back to tabs (don’t close hub)
-                _focusTabs = true;
+                // back out of page -> tabs (do NOT close hub)
+                _focus = HubFocus.Tabs;
                 uc.Actions.ConsumeAll();
                 return;
             }
+
+            // tabs focus: close hub
+            uc.Actions.ConsumeAll();
+            S.Scenes.Pop();
+            return;
         }
 
-        // Tabs focus: Up/Down changes tabs, Confirm enters page
-        if (_focusTabs)
+        // --- Enter page focus ---
+        // Confirm or Right enters page focus (so inventory/character can scroll)
+        if (_focus == HubFocus.Tabs &&
+            (uc.Actions.Pressed(uc.Input, GameAction.Confirm) || uc.Actions.Pressed(uc.Input, GameAction.MoveRight)))
+        {
+            _focus = HubFocus.Page;
+            uc.Actions.ConsumeAll();
+            return;
+        }
+
+        // --- Return to tabs focus from page focus ---
+        if (_focus == HubFocus.Page && uc.Actions.Pressed(uc.Input, GameAction.MoveLeft))
+        {
+            _focus = HubFocus.Tabs;
+            uc.Actions.ConsumeAll();
+            return;
+        }
+
+        // --- Tabs navigation (ONLY when Tabs focus) ---
+        if (_focus == HubFocus.Tabs)
         {
             int prevTab = _tabIndex;
 
@@ -132,26 +129,17 @@ public sealed class MenuHubScene : PanelSceneBase
             {
                 _pages[prevTab].OnExit(S);
                 _pages[_tabIndex].OnEnter(S);
-
-                // Prevent tab-nav from also affecting page selection
-                uc.Actions.ConsumeAll();
-                return;
             }
 
-            // Enter page
-            if (uc.Actions.Pressed(uc.Input, GameAction.Confirm))
-            {
-                _focusTabs = false;
-                uc.Actions.ConsumeAll();
-                return;
-            }
-
+            // Don’t forward input to page while tabs are focused
             return;
         }
 
-        // Page focus: page handles navigation/confirm/etc.
+        // --- Page update (ONLY when Page focus) ---
         _pages[_tabIndex].Update(S, uc);
     }
+
+
 
     protected override void DrawPanelContent(SpriteBatch sb, Rectangle content, RenderContext rc)
     {
@@ -184,11 +172,13 @@ public sealed class MenuHubScene : PanelSceneBase
         for (int i = 0; i < _pages.Count; i++)
         {
             bool sel = i == _tabIndex;
+            bool active = sel && _focusTabs; // tabs focus glow
 
             if (sel)
             {
-                sb.Draw(White, new Rectangle(_tabsRect.X + 8, y - 3, _tabsRect.Width - 16, 20), new Color(80, 140, 255) * 0.18f);
-                sb.Draw(White, new Rectangle(_tabsRect.X + 8, y - 3, 2, 20), new Color(140, 200, 255) * 0.55f);
+                float a = active ? 0.28f : 0.16f;
+                sb.Draw(White, new Rectangle(_tabsRect.X + 8, y - 3, _tabsRect.Width - 16, 20), new Color(80, 140, 255) * a);
+                sb.Draw(White, new Rectangle(_tabsRect.X + 8, y - 3, 2, 20), new Color(140, 200, 255) * (active ? 0.70f : 0.45f));
             }
 
             S.TitleFont.Draw(
