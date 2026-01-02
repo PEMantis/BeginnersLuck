@@ -1,13 +1,16 @@
+using System;
+using BeginnersLuck.Engine.UI;
+using BeginnersLuck.Engine.Update;
+using BeginnersLuck.Game.Services;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using BeginnersLuck.Game.Services;
-using BeginnersLuck.Engine.UI;
 
 namespace BeginnersLuck.Game.Menu;
 
 public sealed class StubPage : IMenuPage
 {
     public string Title { get; }
+    public string FooterHint => "BACK/B: CLOSE";
 
     private readonly string _body;
 
@@ -19,11 +22,13 @@ public sealed class StubPage : IMenuPage
 
     public void OnEnter(GameServices s) { }
     public void OnExit(GameServices s) { }
-    public void Update(GameServices s, float dt) { }
 
-    public void Draw(GameServices s, SpriteBatch sb, Rectangle contentRect, float timeSeconds)
+    public void Draw(GameServices s, SpriteBatch sb, Rectangle r, float t)
     {
-        s.TitleFont.Draw(sb, Title, new Vector2(contentRect.X + 12, contentRect.Y + 10), Color.White * 0.9f, 2);
-        s.UiFont.Draw(sb, _body, new Vector2(contentRect.X + 12, contentRect.Y + 34), Color.White * 0.65f, 1);
+        s.UiFont.Draw(sb, _body.ToUpperInvariant(), new Vector2(r.X + 6, r.Y + 6), Color.White * 0.75f, 1);
+    }
+
+    public void Update(GameServices s, in UpdateContext uc)
+    {
     }
 }

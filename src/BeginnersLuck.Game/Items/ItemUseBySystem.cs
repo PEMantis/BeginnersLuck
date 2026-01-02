@@ -1,5 +1,4 @@
 using BeginnersLuck.Game.Services;
-using Microsoft.Xna.Framework;
 
 namespace BeginnersLuck.Game.Items;
 
@@ -9,6 +8,38 @@ public sealed class ItemUseSystem
 
     public ItemUseSystem(GameServices s) => _s = s;
 
+    /// <summary>
+    /// UI helper: can this item be used right now?
+    /// </summary>
+    public bool CanUse(string itemId, out string reason)
+    {
+        reason = "";
+
+        if (!_s.Items.TryGet(itemId, out var def))
+        {
+            reason = "UNKNOWN";
+            return false;
+        }
+
+        if (!def.Usable || def.Effect == UseEffect.None)
+        {
+            reason = "NOT USABLE";
+            return false;
+        }
+
+        if (!_s.Player.Inventory.TryGetCount(itemId, out var qty) || qty <= 0)
+        {
+            reason = "NONE";
+            return false;
+        }
+
+        // Add future gating rules here (status effects, battle-only, etc.)
+        return true;
+    }
+
+    /// <summary>
+    /// Uses 1 item if possible, returns a message for toast/UI.
+    /// </summary>
     public bool TryUse(string itemId, out string message)
     {
         message = "";
@@ -36,7 +67,7 @@ public sealed class ItemUseSystem
             case UseEffect.HealHp:
             {
                 int before = _s.Player.Hp;
-                _s.Player.Hp = (int)MathHelper.Clamp(_s.Player.Hp + def.Amount, 0, _s.Player.MaxHp);
+                _s.Player.Heal(def.Amount);
                 int gained = _s.Player.Hp - before;
 
                 _s.Player.Inventory.Add(itemId, -1);
@@ -49,31 +80,6 @@ public sealed class ItemUseSystem
 
             default:
                 message = $"{def.Name} has no effect yet.";
-                return false;
-        }
-    }
-
-    public bool TryUseOne(string itemId)
-    {
-        if (_s.Player.Inventory.CountOf(itemId) <= 0)
-            return false;
-
-        // v1: hardcode a couple usable items by id
-        switch (itemId)
-        {
-            case "potion":
-                _s.Player.Heal(10);
-                _s.Player.Inventory.Remove(itemId, 1);
-                // _s.Toasts?.Enqueue("HEALED 10 HP!"); // if ToastQueue supports it; otherwise remove
-                return true;
-
-            case "hi_potion":
-                _s.Player.Heal(25);
-                _s.Player.Inventory.Remove(itemId, 1);
-                // _s.Toasts?.Enqueue("HEALED 25 HP!");
-                return true;
-
-            default:
                 return false;
         }
     }

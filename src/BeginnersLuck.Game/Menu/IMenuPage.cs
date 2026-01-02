@@ -1,23 +1,22 @@
-using BeginnersLuck.Engine.Rendering;
+using BeginnersLuck.Engine.Update;
+using BeginnersLuck.Game.Services;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using BeginnersLuck.Game.Services;
 
 namespace BeginnersLuck.Game.Menu;
 
 public interface IMenuPage
 {
     string Title { get; }
+    string FooterHint { get; }
 
-    // called once when the hub is created (optional initialization)
+    // Called when tab becomes active/inactive
     void OnEnter(GameServices s);
-
-    // called when switching away (optional cleanup)
     void OnExit(GameServices s);
 
-    // update page-specific logic (optional)
-    void Update(GameServices s, float dt);
+    // Called every frame while active
+    void Update(GameServices s, in UpdateContext uc);
 
-    // draw right-side content area
+    // Draw inside the content rectangle passed by MenuHubScene
     void Draw(GameServices s, SpriteBatch sb, Rectangle contentRect, float timeSeconds);
 }

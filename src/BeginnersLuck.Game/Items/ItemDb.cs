@@ -46,4 +46,23 @@ public sealed class ItemDb
 
         return "No description available.";
     }
+    public string UsePreviewOf(string id)
+    {
+        if (!_defs.TryGetValue(id, out var def))
+            return "UNKNOWN.";
+
+        if (!def.Usable || def.Effect == UseEffect.None)
+            return "NOT USABLE.";
+
+        return def.Effect switch
+        {
+            UseEffect.HealHp => $"RESTORES {def.Amount} HP.",
+            _ => "EFFECT UNKNOWN."
+        };
+    }
+
+    public bool IsUsable(string id)
+    => _defs.TryGetValue(id, out var def) && def.Usable && def.Effect != UseEffect.None;
+
+
 }

@@ -101,13 +101,19 @@ public static class MenuRenderer
         }
     }
 
-    public static void DrawOutline(SpriteBatch sb, Texture2D white, Rectangle r, int t, Color c)
+    public static void DrawOutline(
+        SpriteBatch sb,
+        Texture2D white,
+        Rectangle r,
+        int t,
+        Color c)
     {
         sb.Draw(white, new Rectangle(r.X, r.Y, r.Width, t), c);
         sb.Draw(white, new Rectangle(r.X, r.Bottom - t, r.Width, t), c);
         sb.Draw(white, new Rectangle(r.X, r.Y, t, r.Height), c);
         sb.Draw(white, new Rectangle(r.Right - t, r.Y, t, r.Height), c);
     }
+
 
     public static void DrawFooterHint(
     SpriteBatch sb,
@@ -134,5 +140,41 @@ public static class MenuRenderer
         var rightSize = font.Measure(rightHint, scale);
         font.Draw(sb, rightHint, new Vector2(r.Right - rightSize.X, r.Y), color, scale);
     }
+
+    public static void DrawScrollBar(
+    SpriteBatch sb,
+    Texture2D white,
+    Rectangle track,
+    int totalItems,
+    int firstVisibleIndex,
+    int visibleCount,
+    float alpha = 0.35f)
+    {
+        if (totalItems <= 0 || visibleCount <= 0) return;
+
+        // Track
+        sb.Draw(white, track, Color.White * (alpha * 0.20f));
+        DrawOutline(sb, white, track, 1, Color.White * (alpha * 0.35f));
+
+        // If everything fits, thumb fills track
+        if (totalItems <= visibleCount)
+        {
+            sb.Draw(white, new Rectangle(track.X + 1, track.Y + 1, track.Width - 2, track.Height - 2), Color.White * (alpha * 0.25f));
+            return;
+        }
+
+        // Thumb size proportional to visible fraction
+        float frac = MathHelper.Clamp(visibleCount / (float)totalItems, 0.08f, 1f);
+        int thumbH = Math.Max(8, (int)((track.Height - 2) * frac));
+
+        // Thumb position proportional to scroll
+        float t = firstVisibleIndex / (float)(totalItems - visibleCount);
+        int thumbY = track.Y + 1 + (int)((track.Height - 2 - thumbH) * t);
+
+        var thumb = new Rectangle(track.X + 1, thumbY, track.Width - 2, thumbH);
+        sb.Draw(white, thumb, Color.White * (alpha * 0.55f));
+    }
+
+
 
 }

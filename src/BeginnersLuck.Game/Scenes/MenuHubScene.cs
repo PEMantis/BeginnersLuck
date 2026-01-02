@@ -1,51 +1,46 @@
 using System;
 using System.Collections.Generic;
-using BeginnersLuck.Engine.Graphics;
+using BeginnersLuck.Engine.Input;
 using BeginnersLuck.Engine.Rendering;
-using BeginnersLuck.Engine.Scenes;
 using BeginnersLuck.Engine.UI;
 using BeginnersLuck.Engine.Update;
 using BeginnersLuck.Game.Menu;
 using BeginnersLuck.Game.Services;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 
 namespace BeginnersLuck.Game.Scenes;
 
-public sealed class MenuHubScene : SceneBase
+public sealed class MenuHubScene : PanelSceneBase
 {
-    private readonly GameServices _s;
-
-    private Texture2D? _white;
-
-    private readonly Rectangle _panel = new(24, 18, 432, 234);
-    private readonly Rectangle _tabsRect = new(34, 48, 140, 194);
-    private readonly Rectangle _contentRect = new(184, 48, 262, 194);
-
     private readonly List<IMenuPage> _pages = new();
-
     private int _tabIndex;
 
-    private KeyboardState _prevKs;
-    private GamePadState _prevPad;
-    private bool _eatFirstUpdate = true;
+    // Focus state
+    private bool _focusTabs = true;
 
-    public MenuHubScene(GameServices s, KeyboardState seedKs, GamePadState seedPad, int startTab = 0)
+    // Layout inside ContentRect()
+    private Rectangle _tabsRect;
+    private Rectangle _contentRect;
+
+    public MenuHubScene(GameServices s, int startTab = 0)
+        : base(
+            s,
+            panelRect: new Rectangle(32, 22, 576, 316), // tuned for 640x360
+            title: "MENU")
     {
-        _s = s ?? throw new ArgumentNullException(nameof(s));
-        _prevKs = seedKs;
-        _prevPad = seedPad;
         _tabIndex = startTab;
+
+        TitleScale = 2;
+        PanelPadding = 14;
+
+        FooterHint = "TAB/START: TOGGLE   LB/RB: TAB   BACK/B: CLOSE";
+        ShowFooterHint = true;
     }
 
-    public override void Load(GraphicsDevice graphicsDevice, ContentManager content)
+    protected override void OnLoad(GraphicsDevice graphicsDevice, Microsoft.Xna.Framework.Content.ContentManager content)
     {
-        _white = new Texture2D(graphicsDevice, 1, 1);
-        _white.SetData(new[] { Color.White });
-
-        // Register pages (order matters)
         _pages.Clear();
         _pages.Add(new InventoryPage());
         _pages.Add(new StubPage("CHARACTER", "Stats + equipment later."));
@@ -54,91 +49,137 @@ public sealed class MenuHubScene : SceneBase
         _pages.Add(new StubPage("JOURNAL", "Quests + notes later."));
 
         _tabIndex = Math.Clamp(_tabIndex, 0, _pages.Count - 1);
+        _pages[_tabIndex].OnEnter(S);
 
-        _pages[_tabIndex].OnEnter(_s);
+        _focusTabs = true;
     }
 
-    public override void Unload()
+    protected override void OnUnload()
     {
         if (_pages.Count > 0 && _tabIndex >= 0 && _tabIndex < _pages.Count)
-            _pages[_tabIndex].OnExit(_s);
+            _pages[_tabIndex].OnExit(S);
 
-        _white?.Dispose();
-        _white = null;
+        _pages.Clear();
     }
 
-    public override void Update(UpdateContext uc)
+    protected override void OnUpdate(UpdateContext uc)
     {
-        var ks = Keyboard.GetState();
-        var pad = GamePad.GetState(PlayerIndex.One);
+        if (_pages.Count == 0) return;
 
-        if (_eatFirstUpdate)
+        // Toggle focus (Tab / Start) any time
+        if (uc.Actions.Pressed(uc.Input, GameAction.Menu))
         {
-            _eatFirstUpdate = false;
-            _prevKs = ks;
-            _prevPad = pad;
+            _focusTabs = !_focusTabs;
+            uc.Actions.ConsumeAll();
+            return;
+        }
+        FooterHint = _pages[_tabIndex].FooterHint;
+
+        // Shoulder tab switching works in either focus (controller-first feel)
+        bool tabLeft  = uc.Actions.Pressed(uc.Input, Keys.Q) || uc.Actions.Pressed(uc.Input, Buttons.LeftShoulder);
+        bool tabRight = uc.Actions.Pressed(uc.Input, Keys.E) || uc.Actions.Pressed(uc.Input, Buttons.RightShoulder);
+        if (tabLeft || tabRight)
+        {
+            int prev = _tabIndex;
+            _tabIndex = tabLeft
+                ? Math.Max(0, _tabIndex - 1)
+                : Math.Min(_pages.Count - 1, _tabIndex + 1);
+
+            if (_tabIndex != prev)
+            {
+                _pages[prev].OnExit(S);
+                _pages[_tabIndex].OnEnter(S);
+            }
+
+            // Avoid LB/RB also triggering something inside the page that frame
+            uc.Actions.ConsumeAll();
             return;
         }
 
-        // Close hub: Backspace (kbd) or B/Back (pad)
-        if (Pressed(ks, Keys.Back) || Pressed(pad, Buttons.B) || Pressed(pad, Buttons.Back))
+        // Cancel behavior depends on focus
+        if (uc.Actions.Pressed(uc.Input, GameAction.Cancel))
         {
-            _s.Scenes.Pop();
-            _prevKs = ks;
-            _prevPad = pad;
+            if (_focusTabs)
+            {
+                // Close hub
+                uc.Actions.ConsumeAll();
+                S.Scenes.Pop();
+                return;
+            }
+            else
+            {
+                // Back to tabs (don’t close hub)
+                _focusTabs = true;
+                uc.Actions.ConsumeAll();
+                return;
+            }
+        }
+
+        // Tabs focus: Up/Down changes tabs, Confirm enters page
+        if (_focusTabs)
+        {
+            int prevTab = _tabIndex;
+
+            var up = uc.Actions.Get(GameAction.MoveUp);
+            if (up.Pressed || up.Repeated)
+                _tabIndex = Math.Max(0, _tabIndex - 1);
+
+            var dn = uc.Actions.Get(GameAction.MoveDown);
+            if (dn.Pressed || dn.Repeated)
+                _tabIndex = Math.Min(_pages.Count - 1, _tabIndex + 1);
+
+            if (_tabIndex != prevTab)
+            {
+                _pages[prevTab].OnExit(S);
+                _pages[_tabIndex].OnEnter(S);
+
+                // Prevent tab-nav from also affecting page selection
+                uc.Actions.ConsumeAll();
+                return;
+            }
+
+            // Enter page
+            if (uc.Actions.Pressed(uc.Input, GameAction.Confirm))
+            {
+                _focusTabs = false;
+                uc.Actions.ConsumeAll();
+                return;
+            }
+
             return;
         }
 
-        int prevTab = _tabIndex;
-
-        // Tab nav
-        if (Pressed(ks, Keys.Up) || Pressed(ks, Keys.W) || Pressed(pad, Buttons.DPadUp))
-            _tabIndex = Math.Max(0, _tabIndex - 1);
-
-        if (Pressed(ks, Keys.Down) || Pressed(ks, Keys.S) || Pressed(pad, Buttons.DPadDown))
-            _tabIndex = Math.Min(_pages.Count - 1, _tabIndex + 1);
-
-        if (_tabIndex != prevTab)
-        {
-            _pages[prevTab].OnExit(_s);
-            _pages[_tabIndex].OnEnter(_s);
-        }
-
-        float dt = (float)uc.GameTime.ElapsedGameTime.TotalSeconds;
-        _pages[_tabIndex].Update(_s, dt);
-
-        _prevKs = ks;
-        _prevPad = pad;
+        // Page focus: page handles navigation/confirm/etc.
+        _pages[_tabIndex].Update(S, uc);
     }
 
-    private bool Pressed(KeyboardState ks, Keys k) => ks.IsKeyDown(k) && !_prevKs.IsKeyDown(k);
-    private bool Pressed(GamePadState pad, Buttons b) => pad.IsButtonDown(b) && !_prevPad.IsButtonDown(b);
-
-    protected override void DrawUI(RenderContext rc)
+    protected override void DrawPanelContent(SpriteBatch sb, Rectangle content, RenderContext rc)
     {
-        if (_white == null) return;
+        if (White == null || _pages.Count == 0) return;
 
-        var sb = rc.SpriteBatch;
         float t = (float)rc.GameTime.TotalGameTime.TotalSeconds;
 
-        sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
+        // Split content into left tabs + right page
+        int gap = 10;
+        int tabsW = 190;
 
-        // Dim
-        sb.Draw(_white, new Rectangle(0, 0, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight), Color.Black * 0.70f);
+        _tabsRect = new Rectangle(content.X, content.Y, tabsW, content.Height);
+        _contentRect = new Rectangle(content.X + tabsW + gap, content.Y, content.Width - tabsW - gap, content.Height);
 
-        // Main panel
-        MenuRenderer.DrawPanel(sb, _white, _panel, new Color(18, 18, 34) * 0.98f);
+        // Backgrounds
+        sb.Draw(White, _tabsRect, new Color(10, 10, 18) * 0.35f);
+        sb.Draw(White, _contentRect, new Color(10, 10, 18) * 0.25f);
 
-        // Tabs background + content background
-        sb.Draw(_white, _tabsRect, new Color(10, 10, 18) * 0.35f);
-        sb.Draw(_white, _contentRect, new Color(10, 10, 18) * 0.25f);
+        // Focus outline cues
+        var tabsOutline = _focusTabs ? Color.White * 0.55f : Color.White * 0.18f;
+        var pageOutline = !_focusTabs ? Color.White * 0.55f : Color.White * 0.18f;
 
-        // Title top
-        _s.TitleFont.Draw(sb, "MENU", new Vector2(_panel.X + 18, _panel.Y + 10), Color.White * 0.9f, 2);
+        MenuRenderer.DrawOutline(sb, White, _tabsRect, 2, tabsOutline);
+        MenuRenderer.DrawOutline(sb, White, _contentRect, 2, pageOutline);
 
         // Tabs list
-        int rowH = 20;
-        int y = _tabsRect.Y + 10;
+        int rowH = 24;
+        int y = _tabsRect.Y + 12;
 
         for (int i = 0; i < _pages.Count; i++)
         {
@@ -146,26 +187,35 @@ public sealed class MenuHubScene : SceneBase
 
             if (sel)
             {
-                sb.Draw(_white, new Rectangle(_tabsRect.X + 4, y - 2, _tabsRect.Width - 8, 18), new Color(80, 140, 255) * 0.18f);
-                sb.Draw(_white, new Rectangle(_tabsRect.X + 4, y - 2, 2, 18), new Color(140, 200, 255) * 0.55f);
+                sb.Draw(White, new Rectangle(_tabsRect.X + 8, y - 3, _tabsRect.Width - 16, 20), new Color(80, 140, 255) * 0.18f);
+                sb.Draw(White, new Rectangle(_tabsRect.X + 8, y - 3, 2, 20), new Color(140, 200, 255) * 0.55f);
             }
 
-            _s.TitleFont.Draw(sb, _pages[i].Title, new Vector2(_tabsRect.X + 12, y), Color.White * (sel ? 0.95f : 0.70f), 1);
+            S.TitleFont.Draw(
+                sb,
+                _pages[i].Title.ToUpperInvariant(),
+                new Vector2(_tabsRect.X + 18, y),
+                Color.White * (sel ? 0.95f : 0.70f),
+                1);
+
             y += rowH;
         }
 
         // Page header
-        _s.TitleFont.Draw(sb, _pages[_tabIndex].Title, new Vector2(_contentRect.X + 12, _contentRect.Y + 10), Color.White * 0.9f, 2);
+        S.TitleFont.Draw(
+            sb,
+            _pages[_tabIndex].Title.ToUpperInvariant(),
+            new Vector2(_contentRect.X + 12, _contentRect.Y + 10),
+            Color.White * 0.90f,
+            2);
 
-        // Page content area (leave a header margin)
-        var inner = new Rectangle(_contentRect.X, _contentRect.Y + 26, _contentRect.Width, _contentRect.Height - 26);
-        _pages[_tabIndex].Draw(_s, sb, inner, t);
+        // Page inner content rect (below header)
+        var inner = new Rectangle(
+            _contentRect.X + 10,
+            _contentRect.Y + 36,
+            _contentRect.Width - 20,
+            _contentRect.Height - 46);
 
-        // Footer hints
-        _s.UiFont.Draw(sb, "UP/DOWN: TAB   BACK/B: CLOSE",
-            new Vector2(_panel.X + 24, _panel.Bottom - 16),
-            Color.White * 0.65f, 1);
-
-        sb.End();
+        _pages[_tabIndex].Draw(S, sb, inner, t);
     }
 }

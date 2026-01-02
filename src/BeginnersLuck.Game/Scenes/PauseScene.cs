@@ -88,7 +88,7 @@ public sealed class PauseScene : SceneBase
             if (_focus == 1)
             {
                 // Inventory (your hub scene)
-               _s.Scenes.Push(new MenuHubScene(_s, uc.Input.Keyboard, uc.Input.Pad, startTab: 0));
+               _s.Scenes.Push(new MenuHubScene(_s, startTab: 0));
                 uc.Actions.ConsumeAll();
                 //_s.Scenes.ConsumeInput(uc.Actions);
                 return;

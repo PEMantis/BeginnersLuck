@@ -5,8 +5,8 @@ namespace BeginnersLuck.Engine.Graphics;
 
 public sealed class PixelRenderer : IDisposable
 {
-    public const int InternalWidth = 480;
-    public const int InternalHeight = 270;
+    public const int InternalWidth = 640;
+    public const int InternalHeight = 360;
 
     private readonly GraphicsDevice _gd;
     private RenderTarget2D _rt;
