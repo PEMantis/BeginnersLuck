@@ -161,10 +161,10 @@ public sealed class BootScene : SceneBase
 
         // Buttons should also be scale 1 with ButtonFont.
         MenuRenderer.DrawButton(sb, _white, _s.ButtonFont, btnStart, "START",
-            focused: _focus == 0, enabled: true, timeSeconds: t, fontScale: 1, contentPadX: 24, textBiasY: -1);
+            focused: _focus == 0, enabled: true, timeSeconds: t, fontScale: 1, contentPadX: 24);
 
         MenuRenderer.DrawButton(sb, _white, _s.ButtonFont, btnQuit, "QUIT",
-            focused: _focus == 1, enabled: true, timeSeconds: t, fontScale: 1, contentPadX: 24, textBiasY: -1);
+            focused: _focus == 1, enabled: true, timeSeconds: t, fontScale: 1, contentPadX: 24);
 
         sb.End();
     }

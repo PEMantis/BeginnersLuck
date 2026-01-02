@@ -15,20 +15,19 @@ namespace BeginnersLuck.Game.Scenes;
 public sealed class PauseScene : SceneBase
 {
     private Texture2D? _white;
-
-    private readonly Rectangle _panel        = new(110, 58, 260, 154);
-    private readonly Rectangle _btnResume    = new(130, 92,  220, 32);
-    private readonly Rectangle _btnInventory = new(130, 132, 220, 32);
-    private readonly Rectangle _btnMenu      = new(130, 172, 220, 32);
-
-    // 0 Resume, 1 Inventory, 2 Menu
-    private int _focus;
-
     private readonly GameServices _s;
 
-    // This replaces your old seed + _eatFirstUpdate dance.
-    // We consume input on first Update after pushing the scene.
+    private Rectangle _screen;
+    private Rectangle _panel;
+
+    private Rectangle _btnResume;
+    private Rectangle _btnMenu;
+
+    private int _focus; // 0 resume, 1 menu
     private bool _consumeOnFirstUpdate = true;
+
+    private const string LeftHint  = "ENTER/A: SELECT";
+    private const string RightHint = "BACK/B: RETURN";
 
     public PauseScene(GameServices s)
     {
@@ -42,6 +41,7 @@ public sealed class PauseScene : SceneBase
         _white.SetData(new[] { Color.White });
 
         _consumeOnFirstUpdate = true;
+        ComputeLayout();
     }
 
     public override void Unload()
@@ -52,7 +52,6 @@ public sealed class PauseScene : SceneBase
 
     public override void Update(UpdateContext uc)
     {
-        // Prevent “press-through” from the key/button that opened pause
         if (_consumeOnFirstUpdate)
         {
             _consumeOnFirstUpdate = false;
@@ -60,7 +59,6 @@ public sealed class PauseScene : SceneBase
             return;
         }
 
-        // Close pause (Cancel)
         if (uc.Actions.Pressed(uc.Input, GameAction.Cancel))
         {
             _s.Scenes.Pop();
@@ -68,36 +66,23 @@ public sealed class PauseScene : SceneBase
             return;
         }
 
-        // Navigate
         if (uc.Actions.Pressed(uc.Input, GameAction.MoveUp))
             _focus = Math.Max(0, _focus - 1);
 
         if (uc.Actions.Pressed(uc.Input, GameAction.MoveDown))
-            _focus = Math.Min(2, _focus + 1);
+            _focus = Math.Min(1, _focus + 1);
 
-        // Select
         if (uc.Actions.Pressed(uc.Input, GameAction.Confirm))
         {
             if (_focus == 0)
             {
-                _s.Scenes.Pop(); // Resume
+                _s.Scenes.Pop();
                 uc.Actions.ConsumeAll();
                 return;
             }
 
-            if (_focus == 1)
-            {
-                // Inventory (your hub scene)
-               _s.Scenes.Push(new MenuHubScene(_s, startTab: 0));
-                uc.Actions.ConsumeAll();
-                //_s.Scenes.ConsumeInput(uc.Actions);
-                return;
-            }
-
-            // Menu
             _s.Scenes.Replace(new BootScene(_s));
             uc.Actions.ConsumeAll();
-            return;
         }
     }
 
@@ -105,36 +90,94 @@ public sealed class PauseScene : SceneBase
     {
         if (_white == null) return;
 
+        // Keep layout synced if internal resolution changes
+        if (_screen.Width != PixelRenderer.InternalWidth || _screen.Height != PixelRenderer.InternalHeight)
+            ComputeLayout();
+
         var sb = rc.SpriteBatch;
         float t = (float)rc.GameTime.TotalGameTime.TotalSeconds;
 
         sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
 
-        // Dim screen
-        sb.Draw(_white,
-            new Rectangle(0, 0, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight),
-            Color.Black * 0.65f);
+        sb.Draw(_white, _screen, Color.Black * 0.65f);
 
-        // Panel
         MenuRenderer.DrawPanel(sb, _white, _panel, new Color(20, 20, 40) * 0.98f);
 
-        _s.TitleFont.DrawShadow(sb, "PAUSED", new Vector2(_panel.X + 90, _panel.Y + 12), Color.White, scale: 2);
+        // Title centered in top band
+        DrawCenteredInRect(sb, _s.TitleFont, "PAUSED", TitleBandRect(), Color.White, 2);
 
-        // Buttons (UiFont here is fine, or ButtonFont if you prefer)
+        // Buttons
         MenuRenderer.DrawButton(sb, _white, _s.UiFont, _btnResume, "RESUME",
             focused: _focus == 0, enabled: true, timeSeconds: t, fontScale: 2);
 
-        MenuRenderer.DrawButton(sb, _white, _s.UiFont, _btnInventory, "INVENTORY",
+        MenuRenderer.DrawButton(sb, _white, _s.UiFont, _btnMenu, "MENU",
             focused: _focus == 1, enabled: true, timeSeconds: t, fontScale: 2);
 
-        MenuRenderer.DrawButton(sb, _white, _s.UiFont, _btnMenu, "MENU",
-            focused: _focus == 2, enabled: true, timeSeconds: t, fontScale: 2);
-
-        // Hint line (your Option A spacing looked good)
-        _s.UiFont.Draw(sb, "ENTER/A: SELECT   BACK/B: RETURN",
-            new Vector2(_panel.X + 24, _panel.Bottom - 18),
-            Color.White * 0.8f, scale: 1);
+        // Footer hint (reserved band so it can't overlap)
+        MenuRenderer.DrawFooterHint(
+            sb,
+            _s.UiFont,
+            _panel,
+            LeftHint,
+            RightHint,
+            Color.White * 0.80f,
+            scale: 1,
+            padding: 10);
 
         sb.End();
+    }
+
+    private void ComputeLayout()
+    {
+        int w = PixelRenderer.InternalWidth;
+        int h = PixelRenderer.InternalHeight;
+
+        _screen = new Rectangle(0, 0, w, h);
+
+        // Panel size
+        int panelW = Math.Max(280, (int)(w * 0.48f));
+
+        // Compute height from contents so footer always fits:
+        int titleBand = 56;
+        int footerBand = 28;
+        int padTop = 10;
+        int padBottom = 10;
+
+        int btnH = 34;
+        int btnGap = 12;
+        int buttonsBlock = btnH + btnGap + btnH;
+
+        int panelH = padTop + titleBand + buttonsBlock + footerBand + padBottom;
+        panelH = Math.Max(panelH, 150);
+
+        _panel = new Rectangle(
+            (w - panelW) / 2,
+            (h - panelH) / 2,
+            panelW,
+            panelH);
+
+        int padX = 20;
+
+        int btnW = _panel.Width - padX * 2;
+        int btnX = _panel.X + padX;
+
+        int btnY = _panel.Y + padTop + titleBand;
+
+        _btnResume = new Rectangle(btnX, btnY, btnW, btnH);
+        _btnMenu   = new Rectangle(btnX, btnY + btnH + btnGap, btnW, btnH);
+    }
+
+    private Rectangle TitleBandRect()
+    {
+        // A band inside the panel for the title to live in
+        return new Rectangle(_panel.X + 10, _panel.Y + 10, _panel.Width - 20, 44);
+    }
+
+    private static void DrawCenteredInRect(SpriteBatch sb, IFont font, string text, Rectangle r, Color color, int scale)
+    {
+        var size = font.Measure(text, scale);
+        int x = r.X + (r.Width - size.X) / 2;
+        int y = r.Y + (r.Height - font.LineHeight(scale)) / 2;
+        font.Draw(sb, text, new Vector2(x, y), color, scale);
     }
 }

@@ -11,19 +11,20 @@ public sealed class CharacterPage : IMenuPage
 {
     public string Title => "CHARACTER";
 
-    public string FooterHint => "BLAH";
+    // (If your hub shows footer hints per-page later, keep this.)
+    public string FooterHint => "BACK/B: CLOSE";
 
     public void OnEnter(GameServices s) { }
     public void OnExit(GameServices s) { }
 
     public void Update(GameServices s, in UpdateContext uc)
     {
+        // Debug XP grants
         if (uc.Actions.Pressed(uc.Input, Microsoft.Xna.Framework.Input.Keys.F1))
             s.Player.AddXp(10);
 
         if (uc.Actions.Pressed(uc.Input, Microsoft.Xna.Framework.Input.Keys.F2))
             s.Player.AddXp(50);
-
     }
 
     public void Draw(GameServices s, SpriteBatch sb, Rectangle contentRect, float timeSeconds)
@@ -46,8 +47,8 @@ public sealed class CharacterPage : IMenuPage
         var left = new Rectangle(inner.X, inner.Y, leftW, inner.Height);
         var right = new Rectangle(inner.X + leftW + gap, inner.Y, inner.Width - leftW - gap, inner.Height);
 
-        BeginnersLuck.Engine.UI.MenuRenderer.DrawPanel(sb, white, left, new Color(12, 12, 20) * 0.98f);
-        BeginnersLuck.Engine.UI.MenuRenderer.DrawPanel(sb, white, right, new Color(12, 12, 20) * 0.98f);
+        MenuRenderer.DrawPanel(sb, white, left, new Color(12, 12, 20) * 0.98f);
+        MenuRenderer.DrawPanel(sb, white, right, new Color(12, 12, 20) * 0.98f);
 
         DrawVitals(s, sb, white, left);
         DrawSummary(s, sb, white, right);
@@ -55,35 +56,50 @@ public sealed class CharacterPage : IMenuPage
 
     private static void DrawVitals(GameServices s, SpriteBatch sb, Texture2D white, Rectangle r)
     {
+        // Optional scissor to guarantee nothing draws outside this panel.
+        // If you don't want scissoring here, you can remove this block.
+        var gd = sb.GraphicsDevice;
+        var prev = gd.ScissorRectangle;
+        var clip = new Rectangle(r.X + 6, r.Y + 6, r.Width - 12, r.Height - 12);
+        MenuRenderer.BeginScissor(sb, gd, clip);
+
         int x = r.X + 12;
         int y = r.Y + 12;
 
         // Name placeholder
         s.TitleFont.Draw(sb, "HERO", new Vector2(x, y), Color.White * 0.90f, 2);
-        y += s.TitleFont.LineHeight(2) + 10;
+        y += s.TitleFont.LineHeight(2) + 12;
 
-        // HP
+        // HP line
         s.UiFont.Draw(sb, $"HP  {s.Player.Hp}/{s.Player.MaxHp}", new Vector2(x, y), Color.White * 0.85f, 1);
         y += s.UiFont.LineHeight(1) + 6;
 
+        // HP bar
         var hpBar = new Rectangle(x, y, r.Width - 24, 12);
         DrawBar(sb, white, hpBar, s.Player.Hp, s.Player.MaxHp,
             back: new Color(30, 30, 45),
             fill: new Color(80, 220, 120));
-        y += 20;
+        y += 22;
 
-        var xpBar = new Rectangle(x, y + s.UiFont.LineHeight(1) + 6, r.Width - 24, 12);
-        int need = s.Player.XpToNextLevel();
-        int cur = s.Player.XpIntoLevel();
-
+        // LEVEL line
         s.UiFont.Draw(sb, $"LV  {s.Player.Level}", new Vector2(x, y), Color.White * 0.85f, 1);
-        // ...
-        s.UiFont.Draw(sb, $"XP  {cur}/{need}", new Vector2(x, y), Color.White * 0.75f, 1);
+        y += s.UiFont.LineHeight(1) + 6;
 
+        // XP values (THIS was the bug: don't use Level as XP)
+        int need = s.Player.XpToNextLevel();
+        int cur = s.Player.XpIntoLevel;
+
+        // XP line
+        s.UiFont.Draw(sb, $"XP  {cur}/{need}", new Vector2(x, y), Color.White * 0.75f, 1);
+        y += s.UiFont.LineHeight(1) + 6;
+
+        // XP bar directly under XP line
+        var xpBar = new Rectangle(x, y, r.Width - 24, 12);
         DrawBar(sb, white, xpBar, cur, need,
             back: new Color(30, 30, 45),
             fill: new Color(120, 160, 255));
 
+        MenuRenderer.EndScissor(sb, gd, prev);
     }
 
     private static void DrawSummary(GameServices s, SpriteBatch sb, Texture2D white, Rectangle r)
@@ -93,7 +109,6 @@ public sealed class CharacterPage : IMenuPage
 
         // shrink a bit so outline stays visible
         var clip = new Rectangle(r.X + 6, r.Y + 6, r.Width - 12, r.Height - 12);
-
         MenuRenderer.BeginScissor(sb, gd, clip);
 
         int x = r.X + 12;

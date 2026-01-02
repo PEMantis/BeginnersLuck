@@ -1,18 +1,16 @@
 using Microsoft.Xna.Framework.Input;
+using System.Collections.Generic;
 
 namespace BeginnersLuck.Engine.Input;
 
 public sealed class ActionMap
 {
-    // Repeat tuning for directional actions
     public float RepeatDelay { get; set; } = 0.25f;
     public float RepeatRate  { get; set; } = 0.10f;
 
-    // Modern grouped actions
     public UiActions Ui { get; } = new();
     public SystemActions System { get; } = new();
 
-    // Backing store for GameAction mapping (MenuModel expects this)
     private readonly Dictionary<GameAction, ActionButton> _buttons = new();
 
     private bool _consumeThisFrame;
@@ -22,24 +20,9 @@ public sealed class ActionMap
     public void ConsumeAll() => _consumeThisFrame = true;
 
     // --- Compatibility API used by MenuModel ---
-    public bool Pressed(in InputSnapshot input, GameAction a)
-        => Get(a).Pressed;
-
-    public bool Down(in InputSnapshot input, GameAction a)
-        => Get(a).Down;
-
-    public bool Released(in InputSnapshot input, GameAction a)
-        => Get(a).Released;
-
-    // --- 1-arg overloads for older call sites / ActionMapCompat ---
-    public bool Pressed(GameAction a)
-        => Get(a).Pressed;
-
-    public bool Down(GameAction a)
-        => Get(a).Down;
-
-    public bool Released(GameAction a)
-        => Get(a).Released;
+    public bool Pressed(in InputSnapshot input, GameAction a) => Get(a).Pressed;
+    public bool Down(in InputSnapshot input, GameAction a) => Get(a).Down;
+    public bool Released(in InputSnapshot input, GameAction a) => Get(a).Released;
 
     public ActionButton Get(GameAction a)
         => _buttons.TryGetValue(a, out var b) ? b : default;
@@ -69,13 +52,12 @@ public sealed class ActionMap
             return;
         }
 
-        // ----- NAV (digital + dpad + stick handled by MenuModel, but we still provide buttons) -----
+        // ----- NAV -----
         bool upDown = input.IsDown(Keys.Up) || input.IsDown(Keys.W) || input.IsDown(Buttons.DPadUp);
         bool dnDown = input.IsDown(Keys.Down) || input.IsDown(Keys.S) || input.IsDown(Buttons.DPadDown);
         bool lfDown = input.IsDown(Keys.Left) || input.IsDown(Keys.A) || input.IsDown(Buttons.DPadLeft);
         bool rtDown = input.IsDown(Keys.Right) || input.IsDown(Keys.D) || input.IsDown(Buttons.DPadRight);
 
-        // Repeat-enabled for UI navigation
         var upBtn = MakeRepeatButton(upDown, dt, ref _upRep);
         var dnBtn = MakeRepeatButton(dnDown, dt, ref _downRep);
         var lfBtn = MakeRepeatButton(lfDown, dt, ref _leftRep);
@@ -92,17 +74,26 @@ public sealed class ActionMap
         _buttons[GameAction.MoveRight] = rtBtn;
 
         // ----- ACTIONS -----
+
+        // Confirm: Enter/Space/A
         bool confirmDown = input.IsDown(Keys.Enter) || input.IsDown(Keys.Space) || input.IsDown(Buttons.A);
         bool confirmWas  = input.WasDown(Keys.Enter) || input.WasDown(Keys.Space) || input.WasDown(Buttons.A);
         var confirmBtn   = MakeButton(confirmDown, confirmWas);
 
-        bool cancelDown = input.IsDown(Keys.Escape) || input.IsDown(Buttons.B) || input.IsDown(Buttons.Back);
-        bool cancelWas  = input.WasDown(Keys.Escape) || input.WasDown(Buttons.B) || input.WasDown(Buttons.Back);
+        // Cancel: Backspace / B / Back
+        bool cancelDown = input.IsDown(Keys.Back) || input.IsDown(Buttons.B) || input.IsDown(Buttons.Back);
+        bool cancelWas  = input.WasDown(Keys.Back) || input.WasDown(Buttons.B) || input.WasDown(Buttons.Back);
         var cancelBtn   = MakeButton(cancelDown, cancelWas);
 
-        bool menuDown = input.IsDown(Keys.Tab) || input.IsDown(Buttons.Start);
-        bool menuWas  = input.WasDown(Keys.Tab) || input.WasDown(Buttons.Start);
-        var menuBtn   = MakeButton(menuDown, menuWas);
+        // Pause: Escape / Start  (pause menu only)
+        bool pauseDown = input.IsDown(Keys.Escape) || input.IsDown(Buttons.Start);
+        bool pauseWas  = input.WasDown(Keys.Escape) || input.WasDown(Buttons.Start);
+        var pauseBtn   = MakeButton(pauseDown, pauseWas);
+
+        // MenuHub: Tab / Y  (your hub: inventory/character/etc.)
+        bool hubDown = input.IsDown(Keys.Tab) || input.IsDown(Buttons.Y);
+        bool hubWas  = input.WasDown(Keys.Tab) || input.WasDown(Buttons.Y);
+        var hubBtn   = MakeButton(hubDown, hubWas);
 
         bool quitDown = input.IsDown(Keys.F10);
         bool quitWas  = input.WasDown(Keys.F10);
@@ -110,13 +101,14 @@ public sealed class ActionMap
 
         Ui.Confirm = confirmBtn;
         Ui.Cancel = cancelBtn;
-        Ui.Menu = menuBtn;
+        Ui.Menu = hubBtn; // keep Ui.Menu as “MenuHub” conceptually
 
         System.Quit = quitBtn;
 
         _buttons[GameAction.Confirm] = confirmBtn;
         _buttons[GameAction.Cancel] = cancelBtn;
-        _buttons[GameAction.Menu] = menuBtn;
+        _buttons[GameAction.Pause] = pauseBtn;
+        _buttons[GameAction.MenuHub] = hubBtn;
         _buttons[GameAction.Quit] = quitBtn;
     }
 
@@ -156,17 +148,15 @@ public sealed class ActionMap
 
         rep.WasDown = down;
 
-        // For UI we treat repeated as “fire”
         return new ActionButton(down, pressed, released, repeated);
     }
+
     public static ActionMap CreateDefault()
     {
         return new ActionMap
         {
-            // Menu navigation feel
             RepeatDelay = 0.25f,
-            RepeatRate = 0.09f
+            RepeatRate  = 0.09f
         };
     }
-
 }

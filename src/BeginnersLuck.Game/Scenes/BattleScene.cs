@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using BeginnersLuck.Engine.Graphics;
 using BeginnersLuck.Engine.Rendering;
 using BeginnersLuck.Engine.Scenes;
@@ -32,7 +33,6 @@ public sealed class BattleScene : SceneBase
         public string Name { get; }
         public int Hp { get; set; }
         public int MaxHp { get; }
-
         public bool Alive => Hp > 0;
 
         public Enemy(EnemyDef def)
@@ -45,10 +45,10 @@ public sealed class BattleScene : SceneBase
     }
 
     private readonly GameServices _s;
-    private Texture2D? _white;
-
     private readonly EncounterDef _encounter;
     private readonly Enemy[] _enemies;
+
+    private Texture2D? _white;
 
     // Player (placeholder model for v1)
     private int _playerHp = 30;
@@ -69,21 +69,24 @@ public sealed class BattleScene : SceneBase
     private GamePadState _prevPad;
     private bool _eatFirstUpdate = true;
 
-    // UI layout (virtual 480x270)
-    private readonly Rectangle _panelLeft  = new(16, 28, 216, 150);
-    private readonly Rectangle _panelRight = new(248, 28, 216, 150);
-    private readonly Rectangle _panelCommands = new(16, 190, 220, 64);
-    private readonly Rectangle _panelInfo = new(244, 190, 220, 64);
-
-    private readonly Rectangle _btnAttack = new(26, 202, 180, 22);
-    private readonly Rectangle _btnRun = new(26, 230, 180, 22);
-
+    // Rewards
     private bool _rewardsRolled;
     private bool _rewardsApplied;
     private int _rewardXp;
     private int _rewardGold;
-    private readonly System.Collections.Generic.List<(string ItemId, int Qty)> _rewardLoot = new();
+    private readonly List<(string ItemId, int Qty)> _rewardLoot = new();
 
+    // Victory entry guard
+    private bool _victoryEntered;
+
+    // --------- Dynamic layout (computed from InternalWidth/Height) ----------
+    private Rectangle _screen;
+    private Rectangle _panelLeft;
+    private Rectangle _panelRight;
+    private Rectangle _panelCommands;
+    private Rectangle _panelInfo;
+    private Rectangle _btnAttack;
+    private Rectangle _btnRun;
 
     public BattleScene(GameServices s, EncounterDef encounter, KeyboardState seedKs, GamePadState seedPad)
     {
@@ -109,6 +112,17 @@ public sealed class BattleScene : SceneBase
         _phase = Phase.Intro;
         _phaseT = 0f;
         _focus = 0;
+
+        _rewardsRolled = false;
+        _rewardsApplied = false;
+        _rewardXp = 0;
+        _rewardGold = 0;
+        _rewardLoot.Clear();
+
+        _victoryEntered = false;
+        _eatFirstUpdate = true;
+
+        ComputeLayout();
     }
 
     public override void Unload()
@@ -145,28 +159,23 @@ public sealed class BattleScene : SceneBase
 
             case Phase.PlayerSelect:
             {
-                // Navigate menu
                 if (PressedUp(ks, pad)) _focus = 0;
                 if (PressedDown(ks, pad)) _focus = 1;
 
-                // Confirm
                 if (PressedConfirm(ks, pad))
                 {
                     if (_focus == 0)
                     {
-                        // Attack
                         GoTo(Phase.PlayerResolve);
                     }
                     else
                     {
-                        // Run (exit battle immediately)
                         _message = "YOU FLED!";
                         _messageT = 0.8f;
                         GoTo(Phase.Exit);
                     }
                 }
 
-                // Optional: Cancel could also run in v1 (but avoid Esc/Back to prevent pause press-through)
                 break;
             }
 
@@ -187,14 +196,9 @@ public sealed class BattleScene : SceneBase
                 _message = $"YOU HIT {target.Name.ToUpperInvariant()} FOR {dmg}!";
                 _messageT = 0.9f;
 
-                if (AllEnemiesDown())
-                {
-                    GoTo(Phase.Victory);
-                }
-                else
-                {
-                    GoTo(Phase.EnemyResolve);
-                }
+                if (AllEnemiesDown()) GoTo(Phase.Victory);
+                else GoTo(Phase.EnemyResolve);
+
                 break;
             }
 
@@ -202,7 +206,6 @@ public sealed class BattleScene : SceneBase
             {
                 if (_phaseT < 0.20f) break;
 
-                // One enemy attack for v1: first living enemy hits player
                 var attacker = FirstLivingEnemy();
                 if (attacker == null)
                 {
@@ -216,45 +219,60 @@ public sealed class BattleScene : SceneBase
                 _message = $"{attacker.Name.ToUpperInvariant()} HITS YOU FOR {dmg}!";
                 _messageT = 0.9f;
 
-                if (_playerHp <= 0)
-                    GoTo(Phase.Defeat);
-                else
-                    GoTo(Phase.PlayerSelect);
+                if (_playerHp <= 0) GoTo(Phase.Defeat);
+                else GoTo(Phase.PlayerSelect);
 
                 break;
             }
 
             case Phase.Victory:
+            {
                 RollRewardsIfNeeded();
                 ApplyRewardsIfNeeded();
-                _message = "VICTORY!";
-                _messageT = MathF.Max(_messageT, 999f); // keep visible
+
+                if (!_victoryEntered)
+                {
+                    _victoryEntered = true;
+                    _message = "VICTORY!";
+                    _messageT = 999f;
+                }
+
                 if (PressedConfirm(ks, pad))
                     GoTo(Phase.Exit);
+
                 break;
+            }
 
             case Phase.Defeat:
-                _message = "DEFEAT...";
-                _messageT = MathF.Max(_messageT, 999f);
+            {
+                if (_messageT <= 0f)
+                {
+                    _message = "DEFEAT...";
+                    _messageT = 999f;
+                }
+
                 if (PressedConfirm(ks, pad))
                     GoTo(Phase.Exit);
+
                 break;
+            }
 
             case Phase.Exit:
-                // Use Confirm only to leave (avoid Esc/Back press-through)
+            {
                 if (_phaseT >= 0.15f && PressedConfirm(ks, pad))
                 {
                     _s.Scenes.Pop();
                     return;
                 }
 
-                // Auto-exit on Victory/Run after a short beat (optional)
                 if (_phaseT >= 0.65f && (_message.StartsWith("VICTORY") || _message.StartsWith("YOU FLED")))
                 {
                     _s.Scenes.Pop();
                     return;
                 }
+
                 break;
+            }
         }
 
         _prevKs = ks;
@@ -263,34 +281,37 @@ public sealed class BattleScene : SceneBase
 
     protected override void DrawWorld(RenderContext rc)
     {
-        // Battle is UI-driven for now; world layer can stay empty
+        // UI-driven battle for now
     }
 
     protected override void DrawUI(RenderContext rc)
     {
         if (_white == null) return;
 
+        // In case you ever change InternalWidth/Height later, keep layout in sync:
+        if (_screen.Width != PixelRenderer.InternalWidth || _screen.Height != PixelRenderer.InternalHeight)
+            ComputeLayout();
+
         var sb = rc.SpriteBatch;
         float t = (float)rc.GameTime.TotalGameTime.TotalSeconds;
 
         sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
 
-        // Background dim
-        sb.Draw(_white, new Rectangle(0, 0, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight), Color.Black * 0.75f);
+        // Full-screen backplate (prevents “blue void” if world isn't drawn)
+        sb.Draw(_white, _screen, new Color(10, 12, 22) * 1.0f);
 
-        // Main panels
+        // Subtle vignette/dim
+        sb.Draw(_white, _screen, Color.Black * 0.22f);
+
+        // Panels
         MenuRenderer.DrawPanel(sb, _white, _panelLeft, new Color(18, 18, 34) * 0.98f);
         MenuRenderer.DrawPanel(sb, _white, _panelRight, new Color(18, 18, 34) * 0.98f);
-
-        // Bottom row: COMMANDS + INFO
         MenuRenderer.DrawPanel(sb, _white, _panelCommands, new Color(12, 12, 20) * 0.98f);
         MenuRenderer.DrawPanel(sb, _white, _panelInfo, new Color(12, 12, 20) * 0.98f);
 
-        // Left/Right content
         DrawPlayerPanel(sb);
         DrawEnemiesPanel(sb);
 
-        // --- Bottom: Commands or Continue Hint ---
         bool showCommands = _phase == Phase.PlayerSelect;
 
         if (showCommands)
@@ -311,7 +332,6 @@ public sealed class BattleScene : SceneBase
         }
         else
         {
-            // Commands panel becomes a “Continue” area when not selecting actions
             var hint =
                 _phase switch
                 {
@@ -330,15 +350,12 @@ public sealed class BattleScene : SceneBase
                 1);
         }
 
-        // --- Bottom-right: Info panel content ---
         if (_phase == Phase.Victory)
         {
-            // Victory summary (XP / Gold / Loot)
             DrawVictorySummary(sb);
         }
         else
         {
-            // Normal prompt / context
             string prompt =
                 _phase switch
                 {
@@ -362,48 +379,78 @@ public sealed class BattleScene : SceneBase
             }
         }
 
-        // Message toast (top-center)
         if (_messageT > 0f)
             DrawMessage(sb);
 
         sb.End();
     }
 
+    // ---------------- Layout ----------------
 
+    private void ComputeLayout()
+    {
+        int w = PixelRenderer.InternalWidth;
+        int h = PixelRenderer.InternalHeight;
+
+        _screen = new Rectangle(0, 0, w, h);
+
+        // Tuning knobs
+        int margin = 18;
+        int gap = 16;
+
+        // Two rows: top row (status panels), bottom row (commands/info)
+        int usableW = w - margin * 2;
+        int usableH = h - margin * 2;
+
+        // Top row height + bottom row height
+        int topH = (int)(usableH * 0.62f);
+        int bottomH = usableH - topH - gap;
+
+        // Two columns
+        int colW = (usableW - gap) / 2;
+
+        int x0 = margin;
+        int x1 = margin + colW + gap;
+        int y0 = margin;
+        int y1 = margin + topH + gap;
+
+        _panelLeft = new Rectangle(x0, y0, colW, topH);
+        _panelRight = new Rectangle(x1, y0, colW, topH);
+
+        _panelCommands = new Rectangle(x0, y1, colW, bottomH);
+        _panelInfo = new Rectangle(x1, y1, colW, bottomH);
+
+        // Buttons inside commands panel
+        int pad = 14;
+        int btnW = _panelCommands.Width - pad * 2;
+        int btnH = 30;
+        int btnGap = 10;
+
+        int bx = _panelCommands.X + pad;
+        int by = _panelCommands.Y + pad + 6;
+
+        _btnAttack = new Rectangle(bx, by, btnW, btnH);
+        _btnRun = new Rectangle(bx, by + btnH + btnGap, btnW, btnH);
+    }
+
+    // ---------------- Drawing helpers ----------------
 
     private void DrawPlayerPanel(SpriteBatch sb)
     {
-        // Header
-        _s.TitleFont.DrawString(
-            sb,
-            "HERO",
-            new Vector2(_panelLeft.X + 10, _panelLeft.Y + 10),
-            Color.White * 0.9f,
-            1);
+        _s.TitleFont.Draw(sb, "HERO", new Vector2(_panelLeft.X + 12, _panelLeft.Y + 12), Color.White * 0.9f, 1);
 
-        // HP
         var hpText = $"HP {_playerHp}/{_playerMaxHp}";
-        _s.UiFont.DrawString(
-            sb,
-            hpText,
-            new Vector2(_panelLeft.X + 10, _panelLeft.Y + 34),
-            Color.White * 0.9f,
-            1);
+        _s.UiFont.Draw(sb, hpText, new Vector2(_panelLeft.X + 12, _panelLeft.Y + 38), Color.White * 0.9f, 1);
 
-        // HP bar
-        var bar = new Rectangle(_panelLeft.X + 10, _panelLeft.Y + 50, _panelLeft.Width - 20, 10);
+        var bar = new Rectangle(_panelLeft.X + 12, _panelLeft.Y + 56, _panelLeft.Width - 24, 12);
         DrawBar(sb, bar, _playerHp, _playerMaxHp, back: new Color(30, 30, 45), fill: new Color(80, 220, 120));
     }
+
     private void DrawEnemiesPanel(SpriteBatch sb)
     {
-        _s.TitleFont.DrawString(
-            sb,
-            "ENEMIES",
-            new Vector2(_panelRight.X + 10, _panelRight.Y + 10),
-            Color.White * 0.9f,
-            1);
+        _s.TitleFont.Draw(sb, "ENEMIES", new Vector2(_panelRight.X + 12, _panelRight.Y + 12), Color.White * 0.9f, 1);
 
-        int y = _panelRight.Y + 34;
+        int y = _panelRight.Y + 38;
 
         for (int i = 0; i < _enemies.Length; i++)
         {
@@ -412,19 +459,18 @@ public sealed class BattleScene : SceneBase
             var name = e.Alive ? e.Name.ToUpperInvariant() : $"{e.Name.ToUpperInvariant()} (KO)";
             var c = e.Alive ? Color.White * 0.92f : Color.White * 0.35f;
 
-            _s.UiFont.DrawString(sb, name, new Vector2(_panelRight.X + 10, y), c, 1);
+            _s.UiFont.Draw(sb, name, new Vector2(_panelRight.X + 12, y), c, 1);
 
-            var bar = new Rectangle(_panelRight.X + 10, y + 10, _panelRight.Width - 20, 8);
+            var bar = new Rectangle(_panelRight.X + 12, y + 14, _panelRight.Width - 24, 10);
             DrawBar(sb, bar, e.Hp, e.MaxHp, back: new Color(30, 30, 45), fill: new Color(230, 90, 90));
 
-            y += 22;
-            if (y > _panelRight.Bottom - 18) break;
+            y += 34;
+            if (y > _panelRight.Bottom - 24) break;
         }
     }
 
     private void DrawVictorySummary(SpriteBatch sb)
     {
-        // Inner padding
         const int pad = 10;
 
         var inner = new Rectangle(
@@ -436,23 +482,22 @@ public sealed class BattleScene : SceneBase
         int x = inner.X;
         int y = inner.Y;
 
-        // Header
-        _s.TitleFont.DrawString(sb, "REWARDS", new Vector2(x, y), Color.White * 0.9f, 1);
-        y += _s.TitleFont.LineHeight(1);
+        int maxW = inner.Width;
 
-        // Body lines
+        string Fit(string text)
+            => TrimToWidth(_s.UiFont, text.ToUpperInvariant(), maxW, 1);
+
         void Line(string text, float alpha = 0.85f)
         {
-            text = text.ToUpperInvariant();
-
-            // crude trim: keep it simple for now (we can add a real TrimToWidth helper on IFont later)
-            // If you still have TrimToWidth extension for IFont, feel free to call it here.
-            _s.UiFont.DrawString(sb, text, new Vector2(x, y), Color.White * alpha, 1);
+            _s.UiFont.Draw(sb, Fit(text), new Vector2(x, y), Color.White * alpha, 1);
             y += _s.UiFont.LineHeight(1);
         }
 
-        Line($"XP:   {_rewardXp}", 0.85f);
-        Line($"GOLD: {_rewardGold}", 0.85f);
+        _s.TitleFont.Draw(sb, "REWARDS", new Vector2(x, y), Color.White * 0.9f, 1);
+        y += _s.TitleFont.LineHeight(1);
+
+        Line($"XP:   +{_rewardXp}", 0.85f);
+        Line($"GOLD: +{_rewardGold}", 0.85f);
 
         y += 2;
         Line("LOOT:", 0.75f);
@@ -463,7 +508,6 @@ public sealed class BattleScene : SceneBase
             return;
         }
 
-        // Fit loot lines into remaining space
         int remainingPx = inner.Bottom - y;
         int lh = _s.UiFont.LineHeight(1);
         int maxLines = Math.Max(1, remainingPx / lh);
@@ -483,8 +527,9 @@ public sealed class BattleScene : SceneBase
 
     private void DrawMessage(SpriteBatch sb)
     {
-        // Simple toast: small panel at top
-        var r = new Rectangle(50, 6, 380, 18);
+        // Width relative to screen now, centered
+        int w = _screen.Width;
+        var r = new Rectangle((w / 2) - 190, 8, 380, 18);
 
         sb.Draw(_white!, r, new Color(10, 10, 18) * 0.85f);
         sb.Draw(_white!, new Rectangle(r.X, r.Y, r.Width, 1), Color.White * 0.25f);
@@ -498,20 +543,25 @@ public sealed class BattleScene : SceneBase
         sb.Draw(_white!, r, back);
 
         if (max <= 0) return;
+
         float p = MathHelper.Clamp(value / (float)max, 0f, 1f);
-        int w = (int)(r.Width * p);
+        int bw = (int)(r.Width * p);
 
-        if (w > 0)
-            sb.Draw(_white!, new Rectangle(r.X, r.Y, w, r.Height), fill);
+        if (bw > 0)
+            sb.Draw(_white!, new Rectangle(r.X, r.Y, bw, r.Height), fill);
 
-        // thin highlight line
         sb.Draw(_white!, new Rectangle(r.X, r.Y, r.Width, 1), Color.White * 0.08f);
     }
+
+    // ---------------- Logic helpers ----------------
 
     private void GoTo(Phase p)
     {
         _phase = p;
         _phaseT = 0f;
+
+        if (p != Phase.Victory)
+            _victoryEntered = false;
     }
 
     private bool AllEnemiesDown()
@@ -528,7 +578,6 @@ public sealed class BattleScene : SceneBase
         return null;
     }
 
-    // ---- Input helpers (edge-triggered) ----
     private bool Pressed(KeyboardState ks, Keys k) => ks.IsKeyDown(k) && !_prevKs.IsKeyDown(k);
     private bool Pressed(GamePadState pad, Buttons b) => pad.IsButtonDown(b) && !_prevPad.IsButtonDown(b);
 
@@ -541,17 +590,6 @@ public sealed class BattleScene : SceneBase
     private bool PressedConfirm(KeyboardState ks, GamePadState pad)
         => Pressed(ks, Keys.Enter) || Pressed(ks, Keys.Space) || Pressed(pad, Buttons.A);
 
-    // ---- Text centering (8x8 font) ----
-    private static void DrawTextCentered8x8(SpriteBatch sb, IFont font, string text, Rectangle r, Color color, int scale)
-    {
-        var size = MeasureText8x8(text, scale);
-        var pos = new Vector2(
-            r.X + (r.Width - size.X) * 0.5f,
-            r.Y + (r.Height - size.Y) * 0.5f);
-
-        font.Draw(sb, text, pos, color, scale);
-    }
-
     private static void DrawTextCentered(SpriteBatch sb, IFont font, string text, Rectangle r, Color color, int scale)
     {
         var size = font.Measure(text, scale);
@@ -562,29 +600,25 @@ public sealed class BattleScene : SceneBase
         font.Draw(sb, text, pos, color, scale);
     }
 
-
-    private static Point MeasureText8x8(string text, int scale)
+    private static string TrimToWidth(IFont font, string text, int maxWidth, int scale)
     {
-        int maxLine = 0;
-        int line = 0;
-        int lines = 1;
+        if (string.IsNullOrEmpty(text)) return "";
+        if (font.Measure(text, scale).X <= maxWidth) return text;
 
-        for (int i = 0; i < text.Length; i++)
+        const string ell = "...";
+        int ellW = font.Measure(ell, scale).X;
+        int target = Math.Max(0, maxWidth - ellW);
+
+        int lo = 0, hi = text.Length;
+        while (lo < hi)
         {
-            if (text[i] == '\n')
-            {
-                maxLine = Math.Max(maxLine, line);
-                line = 0;
-                lines++;
-            }
-            else
-            {
-                line++;
-            }
+            int mid = (lo + hi + 1) / 2;
+            var s = text.Substring(0, mid);
+            if (font.Measure(s, scale).X <= target) lo = mid;
+            else hi = mid - 1;
         }
 
-        maxLine = Math.Max(maxLine, line);
-        return new Point(maxLine * 8 * scale, lines * 8 * scale);
+        return (lo <= 0) ? ell : text.Substring(0, lo) + ell;
     }
 
     private void RollRewardsIfNeeded()
@@ -621,6 +655,4 @@ public sealed class BattleScene : SceneBase
         foreach (var (id, qty) in _rewardLoot)
             _s.Player.Inventory.Add(id, qty);
     }
-
-
 }

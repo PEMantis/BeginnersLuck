@@ -8,6 +8,7 @@ public enum GameAction
     MoveRight,
     Confirm,
     Cancel,
-    Menu,
+    MenuHub,
+    Pause,
     Quit
 }

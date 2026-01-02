@@ -18,18 +18,17 @@ public static class MenuRenderer
     }
 
     public static void DrawButton(
-        SpriteBatch sb,
-        Texture2D white,
-        IFont font,
-        Rectangle r,
-        string text,
-        bool focused,
-        bool enabled,
-        float timeSeconds,
-        int fontScale = 1,
-        int contentPadX = 22,
-        int contentPadY = 0,
-        int textBiasY = -1)
+       SpriteBatch sb,
+       Texture2D white,
+       IFont font,
+       Rectangle r,
+       string text,
+       bool focused,
+       bool enabled,
+       float timeSeconds,
+       int fontScale = 1,
+       int contentPadX = 22,
+       int contentPadY = 6) // give a little vertical breathing room
     {
         var baseFill = focused
             ? new Color(70, 70, 120)
@@ -46,16 +45,72 @@ public static class MenuRenderer
 
         DrawOutline(sb, white, r, 2, outline);
 
-        if (font != null)
+        // Text centered in content area using font metrics (no bias magic)
+        if (font != null && !string.IsNullOrWhiteSpace(text))
         {
-            // Content area excludes chevrons + borders so label looks centered
             var content = Inset(r, contentPadX, contentPadY);
-            DrawTextCentered(sb, font, text, content, enabled ? Color.White : Color.White * 0.55f, fontScale, textBiasY);
+
+            // Measure width from the font, height from LineHeight (more stable than Measure().Y)
+            var size = font.Measure(text, fontScale);
+            int textW = size.X;
+            int textH = font.LineHeight(fontScale);
+
+            int x = content.X + (content.Width - textW) / 2;
+            int y = content.Y + (content.Height - textH) / 2;
+
+            // Clamp so we never wander outside the button box
+            if (y < r.Y) y = r.Y;
+            if (y + textH > r.Bottom) y = r.Bottom - textH;
+
+            font.Draw(sb, text, new Vector2(x, y), enabled ? Color.White : Color.White * 0.55f, fontScale);
         }
 
         if (focused && enabled)
             DrawFocusChevrons(sb, white, r, timeSeconds);
     }
+
+    public static void DrawFooterHint(
+        SpriteBatch sb,
+        IFont font,
+        Rectangle panel,
+        string leftHint,
+        string rightHint,
+        Color color,
+        int scale = 1,
+        int padding = 10)
+    {
+        if (font == null) return;
+
+        int lh = font.LineHeight(scale);
+
+        // Footer strip inside the panel (one line tall)
+        var r = new Rectangle(
+            panel.X + padding,
+            panel.Bottom - padding - lh,
+            panel.Width - padding * 2,
+            lh);
+
+        // Optional safety: if panel is too small, do nothing rather than scribbling over UI
+        if (r.Width <= 0 || r.Height <= 0) return;
+
+        // If hints are long, trim so they never collide
+        int rightW = font.Measure(rightHint, scale).X;
+        int gap = 12;
+
+        // Available for left = total - right - gap
+        int leftMax = Math.Max(0, r.Width - rightW - gap);
+
+        leftHint = font.TrimToWidth(leftHint, leftMax, scale);
+
+        // Draw left
+        font.Draw(sb, leftHint, new Vector2(r.X, r.Y), color, scale);
+
+        // Draw right
+        rightW = font.Measure(rightHint, scale).X;
+        font.Draw(sb, rightHint, new Vector2(r.Right - rightW, r.Y), color, scale);
+    }
+
+
 
     private static Rectangle Inset(Rectangle r, int padX, int padY)
         => new Rectangle(r.X + padX, r.Y + padY, r.Width - padX * 2, r.Height - padY * 2);
@@ -112,33 +167,6 @@ public static class MenuRenderer
         sb.Draw(white, new Rectangle(r.X, r.Bottom - t, r.Width, t), c);
         sb.Draw(white, new Rectangle(r.X, r.Y, t, r.Height), c);
         sb.Draw(white, new Rectangle(r.Right - t, r.Y, t, r.Height), c);
-    }
-
-
-    public static void DrawFooterHint(
-    SpriteBatch sb,
-    IFont font,
-    Rectangle panel,
-    string leftHint,
-    string rightHint,
-    Color color,
-    int scale = 1,
-    int padding = 10)
-    {
-        // Footer strip inside the panel
-        int lh = font.LineHeight(scale);
-        var r = new Rectangle(
-            panel.X + padding,
-            panel.Bottom - padding - lh,
-            panel.Width - padding * 2,
-            lh);
-
-        // Left aligned
-        font.Draw(sb, leftHint, new Vector2(r.X, r.Y), color, scale);
-
-        // Right aligned
-        var rightSize = font.Measure(rightHint, scale);
-        font.Draw(sb, rightHint, new Vector2(r.Right - rightSize.X, r.Y), color, scale);
     }
 
     public static void DrawScrollBar(

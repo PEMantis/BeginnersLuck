@@ -4,73 +4,133 @@ namespace BeginnersLuck.Game.State;
 
 public sealed class PlayerState
 {
+    // --- Core stats ---
     public int Level { get; private set; } = 1;
 
-    public int MaxHp { get; set; } = 100;
-    public int Hp { get; set; } = 80;
+    public int MaxHp { get; private set; } = 100;
+    public int Hp { get; private set; } = 80;
 
-    public int Gold { get; set; } = 50;
+    public int Gold { get; private set; } = 50;
 
-    public int Xp { get; private set; } = 0;
+    // XP model: XP inside the current level (0..XpToNextLevel-1)
+    public int XpIntoLevel { get; private set; } = 0;
+
+    // Optional: total XP for UI/telemetry
+    public int TotalXp { get; private set; } = 0;
+
     public PlayerInventory Inventory { get; } = new();
 
-    // --- XP CURVE (tune these) ---
-    private const int BaseXp = 30;     // XP needed from Lv1->Lv2 baseline
-    private const int Growth = 10;     // extra growth per level^2 (quadratic)
+    // Last award summary (handy for UI toasts)
+    public int LastLevelsGained { get; private set; } = 0;
+    public int LastXpGained { get; private set; } = 0;
 
-    public int XpToNextLevel()
+    // ---------------------------
+    // Economy / HP
+    // ---------------------------
+
+    public void AddGold(int gold)
     {
-        // XP required to go from current Level to Level+1
-        // Example: L1: 30+10*1 = 40, L2: 30+10*4 = 70, L3: 30+10*9 = 120 ...
-        return BaseXp + Growth * (Level * Level);
+        Gold += gold;
+        if (Gold < 0) Gold = 0;
     }
 
-    public int XpIntoLevel()
-        => Xp - TotalXpForLevel(Level);
-
-    public int TotalXpForLevel(int level)
+    public void Heal(int amount)
     {
-        // Total XP required to *reach* "level" (level 1 => 0 XP)
-        // Sum_{k=1..level-1} (BaseXp + Growth*k^2)
-        if (level <= 1) return 0;
-
-        int total = 0;
-        for (int k = 1; k <= level - 1; k++)
-            total += BaseXp + Growth * (k * k);
-
-        return total;
+        if (amount <= 0) return;
+        Hp = Math.Min(MaxHp, Hp + amount);
     }
 
-    public int TotalXpForNextLevel()
-        => TotalXpForLevel(Level + 1);
-
-    public int AddXp(int amount)
+    public void Damage(int amount)
     {
-        if (amount <= 0) return 0;
+        if (amount <= 0) return;
+        Hp = Math.Max(0, Hp - amount);
+    }
 
-        Xp += amount;
+    // ---------------------------
+    // XP / Leveling
+    // ---------------------------
 
-        int levelsGained = 0;
-        while (Xp >= TotalXpForNextLevel())
+    /// <summary>
+    /// Existing API: just award XP and level internally.
+    /// </summary>
+    public void AddXp(int xp)
+    {
+        AddXp(xp, out _);
+    }
+
+    /// <summary>
+    /// Award XP and report how many levels were gained.
+    /// </summary>
+    public void AddXp(int xp, out int levelsGained)
+    {
+        levelsGained = 0;
+        LastLevelsGained = 0;
+        LastXpGained = 0;
+
+        if (xp <= 0) return;
+
+        LastXpGained = xp;
+
+        TotalXp += xp;
+        XpIntoLevel += xp;
+
+        // Handle multiple level-ups from a big award
+        while (XpIntoLevel >= XpToNextLevel())
         {
-            Level++;
+            XpIntoLevel -= XpToNextLevel();
+            LevelUp();
             levelsGained++;
-            OnLevelUp();
         }
 
-        return levelsGained;
+        LastLevelsGained = levelsGained;
     }
 
-    private void OnLevelUp()
+    /// <summary>
+    /// XP required to go from current Level -> Level+1.
+    /// "Fair and balanced" default polynomial:
+    /// - fast early (you see progress immediately)
+    /// - ramps later (doesn't explode into grind)
+    ///
+    /// L1: 20
+    /// L2: 40
+    /// L3: 70
+    /// L4: 110
+    /// L5: 160
+    /// L10: 560
+    /// </summary>
+    public int XpToNextLevel()
     {
-        // v1: simple progression
-        MaxHp += 5;
-        Hp = Math.Min(MaxHp, Hp + 5); // little heal bump
-        // later: stats, skill points, etc.
+        int l = Math.Max(1, Level);
+
+        // Tune knobs
+        const int c = 10; // base
+        const int b = 5;  // linear
+        const int a = 5;  // quadratic
+
+        int need = c + (b * l) + (a * l * l);
+        return Math.Max(1, need);
     }
 
-    public void AddGold(int gold) => Gold += gold;
+    /// <summary>
+    /// For UI bars: 0..1 progress to next level.
+    /// </summary>
+    public float XpPercentToNextLevel()
+    {
+        int need = XpToNextLevel();
+        return (need <= 0) ? 0f : Math.Clamp(XpIntoLevel / (float)need, 0f, 1f);
+    }
 
-    public void Heal(int amount) => Hp = Math.Min(MaxHp, Hp + amount);
-    public void Damage(int amount) => Hp = Math.Max(0, Hp - amount);
+    // ---------------------------
+    // Internals
+    // ---------------------------
+
+    private void LevelUp()
+    {
+        Level++;
+
+        // V1 balance:
+        // +5 Max HP per level, and full heal so it feels great immediately.
+        MaxHp += 5;
+        Hp = MaxHp;
+    }
 }

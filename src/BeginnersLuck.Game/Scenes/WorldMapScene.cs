@@ -130,10 +130,22 @@ public sealed class WorldMapScene : SceneBase
             return;
         }
 
-        // Pause (Esc/Start/Back)
+        // Pause (Esc/Start/Back)  ✅ unchanged behavior
         if (Pressed(ks, Keys.Escape) || Pressed(pad, Buttons.Start) || Pressed(pad, Buttons.Back))
         {
             _s.Scenes.Push(new PauseScene(_s));
+            _prevKs = ks;
+            _prevPad = pad;
+            return;
+        }
+
+        // Hub/Menu (Tab / Y) ✅ separate from pause
+        // Tab is intentionally NOT Cancel/Pause. This opens the hub directly.
+        if (Pressed(ks, Keys.Tab) || Pressed(pad, Buttons.Y))
+        {
+            // Start tab 0 should now be whatever you want first (likely Character)
+            _s.Scenes.Push(new MenuHubScene(_s, ks, startTab: 0));
+
             _prevKs = ks;
             _prevPad = pad;
             return;
@@ -193,6 +205,7 @@ public sealed class WorldMapScene : SceneBase
         _prevPad = pad;
     }
 
+
     protected override void DrawWorld(RenderContext rc)
     {
         if (_map == null || _mapRenderer == null || _white == null) return;
@@ -239,7 +252,7 @@ public sealed class WorldMapScene : SceneBase
         // Text
         // (BitmapFont is your 8x8; scale 1 keeps it crisp in 480x270)
         var gold = _s.Player.Gold;
-        var xp = _s.Player.Xp;
+        var xp = _s.Player.TotalXp;
 
         _s.UiFont.Draw(sb, $"GOLD: {gold}", new Vector2(hud.X + 8, hud.Y + 8), Color.White * 0.9f, scale: 1);
         _s.UiFont.Draw(sb, $"XP:   {xp}", new Vector2(hud.X + 8, hud.Y + 18), Color.White * 0.9f, scale: 1);
