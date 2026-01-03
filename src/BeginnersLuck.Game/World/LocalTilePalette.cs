@@ -7,39 +7,34 @@ public static class LocalTilePalette
     // WorldGen TileId -> tileset tile index
     public static int ToTileIndex(TileId id) => id switch
     {
-        TileId.DeepWater     => 1,
-        TileId.ShallowWater  => 2,
-        TileId.Ocean         => 1,
-        TileId.Coast         => 2,
+        TileId.DeepWater    => 1,
+        TileId.Ocean        => 1,
 
-        TileId.Sand          => 3,
-        TileId.Grass         => 4,
-        TileId.Dirt          => 5,
-        TileId.Rock          => 6,
-        TileId.Snow          => 7,
-        TileId.Swamp         => 8,
+        TileId.ShallowWater => 2,
+        TileId.Coast        => 2,
 
-        TileId.Hill          => 6,  // temp: rock
-        TileId.Mountain      => 6,  // temp: rock
+        TileId.Sand         => 3,
+        TileId.Grass        => 4,
+        TileId.Dirt         => 5,
+
+        TileId.Rock         => 6,
+        TileId.Hill         => 6,
+        TileId.Mountain     => 6,
+
+        TileId.Snow         => 7,
+        TileId.Swamp        => 8,
 
         _ => 0
     };
 
-    // Gameplay solidity in WorldGen terms
+    // WorldGen gameplay truth (authoritative)
     public static bool IsSolid(TileId id) => id switch
     {
-        TileId.DeepWater => true,
+        TileId.DeepWater    => true,
         TileId.ShallowWater => true,
-        TileId.Ocean => true,
-        TileId.Mountain => true,
-        _ => false
-    };
-
-    // IMPORTANT: solidity in TileMap space (tileIndex)
-    public static bool IsSolidTileIndex(int tileIndex) => tileIndex switch
-    {
-        1 => true, // DeepWater/Ocean
-        2 => true, // ShallowWater/Coast (for now)
+        TileId.Ocean        => true,
+        TileId.Coast        => true,
+        TileId.Mountain     => true,
         _ => false
     };
 }

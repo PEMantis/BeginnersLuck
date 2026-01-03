@@ -1,8 +1,8 @@
 using System;
+using System.Collections.Generic;
 using BeginnersLuck.Engine.Graphics;
 using BeginnersLuck.Engine.Rendering;
 using BeginnersLuck.Engine.Scenes;
-using BeginnersLuck.Engine.UI;
 using BeginnersLuck.Engine.Update;
 using BeginnersLuck.Engine.World;
 using BeginnersLuck.Game.Services;
@@ -21,6 +21,7 @@ public sealed class LocalMapScene : SceneBase
     private readonly GameServices _s;
     private readonly string _mapBinPath;
     private readonly LocalMapPurpose _purpose;
+    private readonly SpawnRequest _spawn;
 
     private LocalMapData? _local;
 
@@ -29,67 +30,62 @@ public sealed class LocalMapScene : SceneBase
     private TileSet? _tileset;
     private TileMapRenderer? _mapRenderer;
 
-    private Point _playerCell = new(8, 8);
+    private Point _playerCell;
 
     private KeyboardState _prevKs;
     private GamePadState _prevPad;
 
-    public LocalMapScene(GameServices s, string mapBinPath, LocalMapPurpose purpose)
+    public LocalMapScene(GameServices s, string mapBinPath, LocalMapPurpose purpose, SpawnRequest spawn)
     {
         _s = s ?? throw new ArgumentNullException(nameof(s));
         _mapBinPath = mapBinPath ?? throw new ArgumentNullException(nameof(mapBinPath));
         _purpose = purpose;
+        _spawn = spawn;
     }
 
     public override void Load(GraphicsDevice graphicsDevice, ContentManager content)
     {
         _local = LocalMapBinLoader.Load(_mapBinPath);
+        int n = _local.Size;
 
-        int tileSize = 16;
+        const int tileSize = 16;
 
         var tex = _s.Raw.LoadTexture("Textures/tiles.png");
         _tileset = new TileSet(tex, tileSize);
         _mapRenderer = new TileMapRenderer(_tileset);
 
-        int n = _local.Size;
         var tiles = new int[n * n];
+        for (int i = 0; i < tiles.Length; i++)
+            tiles[i] = LocalTilePalette.ToTileIndex(_local.Terrain[i]);
 
-        // Convert terrain -> tileIndex (single pass)
+        _map = new TileMap(n, n, tileSize, tiles);
+
+        // Authoritative collision: Terrain + Flags (no tileIndex fallback reliance)
         for (int y = 0; y < n; y++)
         for (int x = 0; x < n; x++)
         {
             int i = x + y * n;
-            tiles[i] = LocalTilePalette.ToTileIndex(_local.Terrain[i]);
+            var tid = _local.Terrain[i];
+            var flags = _local.Flags[i];
+
+            bool solid =
+                LocalTilePalette.IsSolid(tid) ||
+                (flags & TileFlags.Cliff) != 0;
+
+            // NOTE: Rivers are visual overlays for now (do NOT make them solid yet)
+            _map.SetSolidCell(x, y, solid);
         }
 
-        _map = new TileMap(n, n, tileSize, tiles);
+        // Pick spawn in the largest connected walkable component (prevents trapped pockets)
+        _playerCell = PickSpawnLargestComponent(_map, _local, _spawn);
 
-        // Mark SOLID BY TILE INDEX (reliable)
-        // (So if DeepWater maps to tileIndex=1, we just block index=1 everywhere.)
-        for (int i = 0; i < tiles.Length; i++)
-        {
-            int ti = tiles[i];
-            if (LocalTilePalette.IsSolidTileIndex(ti))
-                _map.SetSolid(ti, true);
-        }
-
-        // Debug counts: walkables
-        int walkable = 0;
-        for (int y = 0; y < n; y++)
-        for (int x = 0; x < n; x++)
-        {
-            if (!_map.IsSolidCell(x, y)) walkable++;
-        }
-        Console.WriteLine($"[LocalMapScene] Walkable cells: {walkable} / {n*n}");
-
-        // Spawn: if current spawn is blocked, find nearest walkable
+        // Final safety: if somehow solid, snap to any walkable in largest component
         if (_map.IsSolidCell(_playerCell.X, _playerCell.Y))
-        {
-            _playerCell = FindNearestWalkable(_map, _playerCell);
-        }
+            _playerCell = FindAnyWalkable(_map) ?? new Point(n / 2, n / 2);
 
-        int spawnI = _playerCell.X + _playerCell.Y * n;
-        Console.WriteLine($"[LocalMapScene] Spawn: {_playerCell.X},{_playerCell.Y} Terrain={_local.Terrain[spawnI]} Solid={_map.IsSolidCell(_playerCell.X,_playerCell.Y)} TileIndex={_map.GetTileId(_playerCell.X,_playerCell.Y)}");
+        // Debug
+        int si = _playerCell.X + _playerCell.Y * n;
+        Console.WriteLine($"[LocalSpawn] spawn={_playerCell.X},{_playerCell.Y} terrain={_local.Terrain[si]} flags={_local.Flags[si]} solid={_map.IsSolidCell(_playerCell.X,_playerCell.Y)}");
 
         _cam.Position = _map.CellToWorldCenter(_playerCell);
     }
@@ -118,6 +114,7 @@ public sealed class LocalMapScene : SceneBase
         }
 
         Point dir = Point.Zero;
+
         if (Pressed(ks, Keys.W) || Pressed(ks, Keys.Up)) dir = new Point(0, -1);
         else if (Pressed(ks, Keys.S) || Pressed(ks, Keys.Down)) dir = new Point(0, 1);
         else if (Pressed(ks, Keys.A) || Pressed(ks, Keys.Left)) dir = new Point(-1, 0);
@@ -163,56 +160,158 @@ public sealed class LocalMapScene : SceneBase
 
         _mapRenderer.Draw(sb, _map, view);
 
+        // Player marker
         var pos = _map.CellToWorldTopLeft(_playerCell);
         sb.Draw(_s.PixelWhite, new Rectangle((int)pos.X + 10, (int)pos.Y + 10, 12, 12), Color.Gold);
 
         sb.End();
     }
 
-    protected override void DrawUI(RenderContext rc)
+    // --------------------------------------------------------------------
+    // Spawn: choose largest connected walkable component, then pick a good cell in it.
+    // --------------------------------------------------------------------
+    private static Point PickSpawnLargestComponent(TileMap map, LocalMapData local, SpawnRequest spawn)
     {
-        if (_local == null || _map == null) return;
+        int n = local.Size;
 
-        var sb = rc.SpriteBatch;
-        sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
+        // Build components of walkable cells (4-neighbor)
+        var compId = new int[n * n];
+        Array.Fill(compId, -1);
 
-        int n = _local.Size;
-        int i = _playerCell.X + _playerCell.Y * n;
+        var compSizes = new List<int>();
+        var compRoadCounts = new List<int>();
 
-        _s.UiFont.Draw(sb, $"LOCAL {_local.Size}x{_local.Size} ({_local.WorldX},{_local.WorldY})  {_purpose}",
-            new Vector2(8, 8), Color.White * 0.9f, scale: 1);
+        int currentComp = 0;
 
-        _s.UiFont.Draw(sb, "E/A: (later) interact   ESC/B: back",
-            new Vector2(8, 18), Color.White * 0.7f, scale: 1);
-
-        _s.UiFont.Draw(sb,
-            $"P: {_playerCell.X},{_playerCell.Y}  solid={_map.IsSolidCell(_playerCell.X,_playerCell.Y)} tileIndex={_map.GetTileId(_playerCell.X,_playerCell.Y)} terrain={_local.Terrain[i]}",
-            new Vector2(8, 28),
-            Color.White * 0.85f,
-            scale: 1);
-
-        sb.End();
-    }
-
-    private static Point FindNearestWalkable(TileMap map, Point start)
-    {
-        // simple expanding diamond search
-        for (int r = 0; r < 64; r++)
+        for (int y = 0; y < n; y++)
+        for (int x = 0; x < n; x++)
         {
-            for (int dy = -r; dy <= r; dy++)
+            int idx = x + y * n;
+            if (compId[idx] != -1) continue;
+            if (map.IsSolidCell(x, y)) continue;
+
+            int size = 0;
+            int roads = 0;
+
+            var q = new Queue<Point>();
+            q.Enqueue(new Point(x, y));
+            compId[idx] = currentComp;
+
+            while (q.Count > 0)
             {
-                int dx = r - Math.Abs(dy);
+                var p = q.Dequeue();
+                size++;
 
-                var a = new Point(start.X + dx, start.Y + dy);
-                if (!map.IsSolidCell(a.X, a.Y)) return a;
+                int i = p.X + p.Y * n;
+                if ((local.Flags[i] & TileFlags.Road) != 0) roads++;
 
-                var b = new Point(start.X - dx, start.Y + dy);
-                if (!map.IsSolidCell(b.X, b.Y)) return b;
+                Try(p.X + 1, p.Y);
+                Try(p.X - 1, p.Y);
+                Try(p.X, p.Y + 1);
+                Try(p.X, p.Y - 1);
+            }
+
+            compSizes.Add(size);
+            compRoadCounts.Add(roads);
+            currentComp++;
+
+            void Try(int xx, int yy)
+            {
+                if ((uint)xx >= (uint)n || (uint)yy >= (uint)n) return;
+                int ii = xx + yy * n;
+                if (compId[ii] != -1) return;
+                if (map.IsSolidCell(xx, yy)) return;
+
+                compId[ii] = currentComp;
+                q.Enqueue(new Point(xx, yy));
             }
         }
 
-        // If the entire map is solid, just give up and keep start
-        return start;
+        if (compSizes.Count == 0)
+            return new Point(n / 2, n / 2);
+
+        // Choose best component:
+        // - Prefer biggest component
+        // - If entering from road, prefer components with roads (tie-break)
+        int best = 0;
+        for (int c = 1; c < compSizes.Count; c++)
+        {
+            if (compSizes[c] > compSizes[best]) best = c;
+            else if (compSizes[c] == compSizes[best] && spawn.Intent == SpawnIntent.EnterFromRoad)
+            {
+                if (compRoadCounts[c] > compRoadCounts[best]) best = c;
+            }
+        }
+
+        // Choose a preferred seed (edge entry)
+        Point seed = spawn.Intent == SpawnIntent.EnterFromRoad && spawn.IncomingDir.HasValue
+            ? EdgeSeed(spawn.IncomingDir.Value, n)
+            : new Point(n / 2, n / 2);
+
+        // Find nearest cell in best component, prefer road if requested
+        bool requireRoad = spawn.Intent == SpawnIntent.EnterFromRoad;
+
+        Point bestCell = FindNearestInComponent(seed, best, requireRoad)
+                      ?? FindNearestInComponent(seed, best, requireRoad2: false)
+                      ?? FindAnyInComponent(best)
+                      ?? new Point(n / 2, n / 2);
+
+        return bestCell;
+
+        Point? FindNearestInComponent(Point start, int comp, bool requireRoad2)
+        {
+            // expanding diamond around start
+            for (int r = 0; r <= n; r++)
+            {
+                for (int dy = -r; dy <= r; dy++)
+                {
+                    int dx = r - Math.Abs(dy);
+
+                    if (Ok(start.X + dx, start.Y + dy, comp, requireRoad2, out var p)) return p;
+                    if (Ok(start.X - dx, start.Y + dy, comp, requireRoad2, out p)) return p;
+                }
+            }
+            return null;
+        }
+
+        bool Ok(int x, int y, int comp, bool requireRoad2, out Point p)
+        {
+            p = new Point(x, y);
+            if ((uint)x >= (uint)n || (uint)y >= (uint)n) return false;
+
+            int idx = x + y * n;
+            if (compId[idx] != comp) return false;
+
+            if (requireRoad2 && (local.Flags[idx] & TileFlags.Road) == 0) return false;
+            return true;
+        }
+
+        Point? FindAnyInComponent(int comp)
+        {
+            for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+                if (compId[x + y * n] == comp)
+                    return new Point(x, y);
+            return null;
+        }
+    }
+
+    private static Point EdgeSeed(Dir dir, int n) => dir switch
+    {
+        Dir.West  => new Point(1, n / 2),
+        Dir.East  => new Point(n - 2, n / 2),
+        Dir.North => new Point(n / 2, 1),
+        Dir.South => new Point(n / 2, n - 2),
+        _ => new Point(n / 2, n / 2)
+    };
+
+    private static Point? FindAnyWalkable(TileMap map)
+    {
+        for (int y = 0; y < map.Height; y++)
+        for (int x = 0; x < map.Width; x++)
+            if (!map.IsSolidCell(x, y))
+                return new Point(x, y);
+        return null;
     }
 
     private bool Pressed(KeyboardState ks, Keys k) => ks.IsKeyDown(k) && !_prevKs.IsKeyDown(k);

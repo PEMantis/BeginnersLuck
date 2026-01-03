@@ -1,3 +1,4 @@
+using BeginnersLuck.Engine.World;
 using BeginnersLuck.WorldGen.Data;
 
 namespace BeginnersLuck.WorldGen.Local;
@@ -15,6 +16,7 @@ public sealed class LocalMap
 
     public TileId[] Terrain { get; }
     public TileFlags[] Flags { get; }     // River/Road etc.
+    public LocalMapMeta Meta { get; } = new();
 
     public LocalMap(int size, int seed, int worldX, int worldY)
     {
@@ -30,6 +32,7 @@ public sealed class LocalMap
 
         Terrain = new TileId[n];
         Flags = new TileFlags[n];
+        Meta = new LocalMapMeta();
     }
 
     public int Index(int x, int y) => (y * Size) + x;

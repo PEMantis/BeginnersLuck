@@ -17,7 +17,9 @@ public sealed class TileMap
     private readonly HashSet<int> _solidTileIds = new();
 
     // Per-cell solidity (what you want for local maps / walls / rivers / etc)
-    private readonly bool[] _solidCells;
+    // -1 = no override, 0 = explicitly not solid, 1 = solid
+    private readonly sbyte[] _solidOverride;
+
 
     public TileMap(int width, int height, int tileSize, int[] tiles)
     {
@@ -33,7 +35,9 @@ public sealed class TileMap
         TileSize = tileSize;
         Tiles = tiles;
 
-        _solidCells = new bool[Width * Height];
+        _solidOverride = new sbyte[Width * Height];
+        Array.Fill(_solidOverride, (sbyte)-1);
+
     }
 
     public Point WorldToCell(Vector2 worldPos)
@@ -76,19 +80,22 @@ public sealed class TileMap
     public void SetSolidCell(int x, int y, bool solid)
     {
         if ((uint)x >= (uint)Width || (uint)y >= (uint)Height) return;
-        _solidCells[Index(x, y)] = solid;
+        _solidOverride[Index(x, y)] = (sbyte)(solid ? 1 : 0);
     }
 
     public bool IsSolidCell(int x, int y)
     {
-        if ((uint)x >= (uint)Width || (uint)y >= (uint)Height) return true; // outside world = blocked
+        if ((uint)x >= (uint)Width || (uint)y >= (uint)Height) return true;
+
         int i = Index(x, y);
 
-        // Cell override wins
-        if (_solidCells[i]) return true;
+        // Override wins (both solid and NOT solid)
+        sbyte ov = _solidOverride[i];
+        if (ov != -1) return ov == 1;
 
-        // Otherwise fall back to tile-id rules (if you use them)
+        // Otherwise fall back to tile-id rules
         int id = Tiles[i];
         return id >= 0 && IsSolidTileId(id);
     }
+
 }

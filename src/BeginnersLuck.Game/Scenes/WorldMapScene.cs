@@ -53,6 +53,7 @@ public sealed class WorldMapScene : SceneBase
 
     // Actual WorldGen runtime world (needed for local generation)
     private BeginnersLuck.WorldGen.WorldMap? _worldMap;
+    private Dir _lastWorldMoveDir = Dir.North; // default doesn’t matter much
 
     public WorldMapScene(GameServices s)
     {
@@ -225,9 +226,22 @@ public sealed class WorldMapScene : SceneBase
             if ((uint)next.X < (uint)_map.Width && (uint)next.Y < (uint)_map.Height)
             {
                 if (!_map.IsSolidCell(next.X, next.Y))
+                {
                     _playerCell = next;
+
+                    // Only update when the move actually happened
+                    if (dir.X == 1) _lastWorldMoveDir = Dir.East;
+                    else if (dir.X == -1) _lastWorldMoveDir = Dir.West;
+                    else if (dir.Y == 1) _lastWorldMoveDir = Dir.South;
+                    else if (dir.Y == -1) _lastWorldMoveDir = Dir.North;
+                }
             }
         }
+
+        if (dir.X == 1) _lastWorldMoveDir = Dir.East;
+        if (dir.X == -1) _lastWorldMoveDir = Dir.West;
+        if (dir.Y == 1) _lastWorldMoveDir = Dir.South;
+        if (dir.Y == -1) _lastWorldMoveDir = Dir.North;
 
         // DEV: jump into known-good local map (seed777 local_262_20)
         if (Pressed(ks, Keys.F9) || Pressed(pad, Buttons.RightStick))
@@ -238,11 +252,12 @@ public sealed class WorldMapScene : SceneBase
             var purpose = LocalMapPurpose.Town;
 
             string localBin = WorldPaths.LocalBin(seed, wx, wy);
+            var spawn = new SpawnRequest(SpawnIntent.EnterFromRoad, IncomingDir: Opposite(_lastWorldMoveDir));
 
             if (!File.Exists(localBin))
                 _s.Toasts.Push($"Missing: {localBin}", 1.4f);
             else if (!_s.Fade.Active)
-                _s.Fade.Start(0.25f, () => _s.Scenes.Push(new LocalMapScene(_s, localBin, purpose)));
+                _s.Fade.Start(0.25f, () => _s.Scenes.Push(new LocalMapScene(_s, localBin, purpose, spawn)));
 
             _prevKs = ks;
             _prevPad = pad;
@@ -275,9 +290,10 @@ public sealed class WorldMapScene : SceneBase
                 localSize: 128,
                 purpose: purpose
             );
+            var spawn = new SpawnRequest(SpawnIntent.EnterFromRoad, IncomingDir: Opposite(_lastWorldMoveDir));
 
             if (!_s.Fade.Active)
-                _s.Fade.Start(0.25f, () => _s.Scenes.Push(new LocalMapScene(_s, localBin, purpose)));
+                _s.Fade.Start(0.25f, () => _s.Scenes.Push(new LocalMapScene(_s, localBin, purpose, spawn)));
 
             _prevKs = ks;
             _prevPad = pad;
@@ -412,6 +428,14 @@ public sealed class WorldMapScene : SceneBase
         _toastSeedKs = ks;
         _toastSeedPad = pad;
     }
+    private static Dir Opposite(Dir d) => d switch
+    {
+        Dir.North => Dir.South,
+        Dir.South => Dir.North,
+        Dir.East => Dir.West,
+        Dir.West => Dir.East,
+        _ => Dir.North
+    };
 
     private bool Pressed(KeyboardState ks, Keys k) => ks.IsKeyDown(k) && !_prevKs.IsKeyDown(k);
     private bool Pressed(GamePadState pad, Buttons b) => pad.IsButtonDown(b) && !_prevPad.IsButtonDown(b);

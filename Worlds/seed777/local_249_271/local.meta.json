@@ -1,0 +1,17 @@
+{
+  "Version": 1,
+  "Size": 128,
+  "Seed": -126954959,
+  "WorldX": 249,
+  "WorldY": 271,
+  "Purpose": "wild",
+  "Biome": "Plains",
+  "Portals": {},
+  "HasTownCenter": false,
+  "TownCenterX": 0,
+  "TownCenterY": 0,
+  "WaterTiles": 0,
+  "RiverTiles": 0,
+  "RoadTiles": 0,
+  "TownTiles": 0
+}
