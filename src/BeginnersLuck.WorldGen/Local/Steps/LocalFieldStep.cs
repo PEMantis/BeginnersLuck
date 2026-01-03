@@ -15,11 +15,13 @@ public sealed class LocalFieldsStep : ILocalGenStep
         (float baseElev, float elevAmp, float moistBias, float tempBias, float roughness) =
             BiomeProfile(ctx.Biome, ctx.Request.Purpose);
 
+        // Generate fields
         for (int y = 0; y < n; y++)
         for (int x = 0; x < n; x++)
         {
-            float nx = x / (float)n;
-            float ny = y / (float)n;
+            // IMPORTANT: use n-1 to cover full [0..1] range, avoids edge compression
+            float nx = (n <= 1) ? 0f : x / (float)(n - 1);
+            float ny = (n <= 1) ? 0f : y / (float)(n - 1);
 
             float e = Fbm(seed + 101, nx, ny, 5, 2.0f, 0.5f);
             float m = Fbm(seed + 202, nx, ny, 4, 2.1f, 0.55f);
@@ -35,20 +37,29 @@ public sealed class LocalFieldsStep : ILocalGenStep
 
             int idx = ctx.Map.Index(x, y);
 
-            ctx.Map.Elevation[idx] = (byte)Math.Clamp((int)(e * 255f), 0, 255);
-            ctx.Map.Moisture[idx] = (byte)Math.Clamp((int)(m * 255f), 0, 255);
+            ctx.Map.Elevation[idx]   = (byte)Math.Clamp((int)(Clamp01(e) * 255f), 0, 255);
+            ctx.Map.Moisture[idx]    = (byte)Math.Clamp((int)(m * 255f), 0, 255);
             ctx.Map.Temperature[idx] = (byte)Math.Clamp((int)(t * 255f), 0, 255);
         }
 
-        // ✅ IMPORTANT:
-        // Do NOT set ctx.SeaLevel here.
-        // SeaLevel is decided by LocalMapGenerator.ReadWorldTile using world terrain.
+        // Post-verify (this should NEVER be 0/0 unless step didn't run or arrays are wrong)
+        byte minE = 255, maxE = 0;
+        for (int i = 0; i < ctx.Map.Elevation.Length; i++)
+        {
+            byte v = ctx.Map.Elevation[i];
+            if (v < minE) minE = v;
+            if (v > maxE) maxE = v;
+        }
+
+        Console.WriteLine($"[LocalFields] done. seed={seed} biome={ctx.Biome} elevMin={minE} elevMax={maxE}");
+
+        if (maxE == 0)
+            throw new InvalidOperationException("[LocalFields] Elevation is all zero AFTER generation. Map buffers are not being written or are being replaced.");
     }
 
     private static (float baseElev, float elevAmp, float moistBias, float tempBias, float roughness)
         BiomeProfile(BiomeId b, LocalMapPurpose purpose)
     {
-        // Raised base elevation for land so inland tiles don't end up near sea level.
         return b switch
         {
             BiomeId.Ocean     => (0.15f, 0.10f, 0.10f, 0.00f, 0.70f),
@@ -72,7 +83,6 @@ public sealed class LocalFieldsStep : ILocalGenStep
     private static float Mix(float a, float b, float t) => a + (b - a) * t;
     private static float Clamp01(float v) => v < 0 ? 0 : (v > 1 ? 1 : v);
 
-    // Hash-based smooth value noise
     private static float Hash01(int seed, int x, int y)
     {
         unchecked

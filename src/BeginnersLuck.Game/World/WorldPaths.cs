@@ -26,6 +26,35 @@ public static class WorldPaths
 
     public static string WorldsDir() => Path.Combine(FindRepoRootWithWorlds(), "Worlds");
 
-    public static string LocalMapBinPath(int worldSeed, int wx, int wy)
-        => Path.Combine(WorldsDir(), $"seed{worldSeed}", $"local_{wx}_{wy}", "local.mapbin");
+    public static string LocalMapBinPath(int seed, int wx, int wy)
+    => Path.Combine(SeedRoot(seed), $"local_{wx}_{wy}", "local.mapbin");
+
+    public static string FindRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+
+        // AppContext.BaseDirectory points to bin/.../net9.0, so walk up.
+        while (dir != null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "BeginnersLuck.sln")))
+                return dir.FullName;
+
+            dir = dir.Parent;
+        }
+
+        // fallback: current working dir (still better than crashing)
+        return Directory.GetCurrentDirectory();
+    }
+
+    public static string WorldsRoot()
+        => Path.Combine(FindRepoRoot(), "Worlds");
+
+    public static string SeedRoot(int seed)
+        => Path.Combine(WorldsRoot(), $"seed{seed}");
+
+    public static string LocalDir(int seed, int wx, int wy)
+        => Path.Combine(SeedRoot(seed), $"local_{wx}_{wy}");
+
+    public static string LocalBin(int seed, int wx, int wy)
+        => Path.Combine(LocalDir(seed, wx, wy), "local.mapbin");
 }

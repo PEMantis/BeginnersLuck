@@ -200,6 +200,31 @@ public sealed class WorldMapScene : SceneBase
             }
         }
 
+        // DEV: jump straight into the known-good local map (seed777 local_262_20)
+        // Use F9 (or RightStick) so it doesn't conflict with normal controls.
+        if (Pressed(ks, Keys.F9) || Pressed(pad, Buttons.RightStick))
+        {
+            int seed = _s.World.WorldSeed;   // should be 777 in your current setup
+            int wx = 262;
+            int wy = 20;
+            var purpose = LocalMapPurpose.Town;
+
+            string localBin = WorldPaths.LocalMapBinPath(seed, wx, wy);
+
+            if (!File.Exists(localBin))
+            {
+                _s.Toasts.Push($"Missing: {localBin}", 1.4f);
+            }
+            else if (!_s.Fade.Active)
+            {
+                _s.Fade.Start(0.25f, () => _s.Scenes.Push(new LocalMapScene(_s, localBin, purpose)));
+            }
+
+            _prevKs = ks;
+            _prevPad = pad;
+            return;
+        }
+
         // Enter Local Map (E / A)
         if (Pressed(ks, Keys.E) || Pressed(pad, Buttons.A))
         {

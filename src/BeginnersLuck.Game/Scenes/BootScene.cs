@@ -74,6 +74,7 @@ public sealed class BootScene : SceneBase
         // Select
         if (Pressed(ks, Keys.Enter) || Pressed(ks, Keys.Space) || Pressed(pad, Buttons.A))
         {
+            
             if (_focus == 0)
             {
                 // Start game

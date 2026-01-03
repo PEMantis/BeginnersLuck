@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using BeginnersLuck.WorldGen.Data;
 using BeginnersLuck.WorldGen.Local;
@@ -36,7 +37,21 @@ public static class LocalMapBinLoader
         var moisture = br.ReadBytes(count);
         var temperature = br.ReadBytes(count);
 
+        // Terrain bytes
         var terrainBytes = br.ReadBytes(count);
+
+        // Debug counts MUST be based on terrainBytes (not the uninitialized terrain array)
+        int deep = 0, grass = 0, swamp = 0, unk = 0;
+        for (int i = 0; i < terrainBytes.Length; i++)
+        {
+            var t = (TileId)terrainBytes[i];
+            if (t == TileId.DeepWater) deep++;
+            else if (t == TileId.Grass) grass++;
+            else if (t == TileId.Swamp) swamp++;
+            else if (t == TileId.Unknown) unk++;
+        }
+        Console.WriteLine($"[LocalMapBinLoader] terrain counts: deep={deep} grass={grass} swamp={swamp} unk={unk} total={terrainBytes.Length}");
+
         var terrain = new TileId[count];
         for (int i = 0; i < count; i++)
             terrain[i] = (TileId)terrainBytes[i];

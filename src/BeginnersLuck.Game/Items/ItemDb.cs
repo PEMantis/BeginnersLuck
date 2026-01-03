@@ -31,7 +31,9 @@ public sealed class ItemDb
         => _defs[def.Id] = def;
 
     public bool TryGet(string id, out ItemDef def)
-        => _defs.TryGetValue(id, out def);
+    {
+        return _defs.TryGetValue(id, out def);
+    }
 
     public string NameOf(string id)
         => _defs.TryGetValue(id, out var def) ? def.Name : id;

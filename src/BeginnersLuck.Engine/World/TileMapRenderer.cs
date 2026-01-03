@@ -24,7 +24,7 @@ public sealed class TileMapRenderer
         for (int y = minY; y <= maxY; y++)
         for (int x = minX; x <= maxX; x++)
         {
-            int id = map.GetTile(x, y);
+            int id = map.GetTileId(x, y);
             if (id < 0) continue;
 
             var src = _tileset.SourceRect(id);

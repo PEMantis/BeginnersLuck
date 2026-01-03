@@ -80,6 +80,55 @@ var request = new WorldGenRequest(
 
 IWorldGenerator generator = new WorldGenerator();
 var world = generator.Generate(request);
+int findLand = GetInt(argsList, "--findland", 0);
+int findTown = GetInt(argsList, "--findtown", 0);
+
+if (findLand > 0 || findTown > 0)
+{
+    int landLeft = findLand;
+    int townLeft = findTown;
+
+    Console.WriteLine("=== Candidates ===");
+
+    foreach (var (cx, cy) in world.AllChunkCoords())
+    {
+        var ch = world.GetChunk(cx, cy);
+        int cs = world.ChunkSize;
+
+        for (int ly = 0; ly < cs; ly++)
+        for (int lx = 0; lx < cs; lx++)
+        {
+            int i = ch.Index(lx, ly);
+            int wx = cx * cs + lx;
+            int wy = cy * cs + ly;
+
+            var t = ch.Terrain[i];
+            bool isTown = (ch.Flags[i] & TileFlags.Town) != 0;
+
+            bool isLand = t is not (TileId.DeepWater or TileId.ShallowWater or TileId.Ocean or TileId.Coast);
+
+            if (townLeft > 0 && isTown)
+            {
+                Console.WriteLine($"TOWN  wx={wx} wy={wy} terrain={t} biome={ch.Biome[i]} region={ch.Region[i]} sub={ch.SubRegion[i]}");
+                townLeft--;
+                if (townLeft == 0 && landLeft == 0) break;
+            }
+
+            if (landLeft > 0 && isLand)
+            {
+                Console.WriteLine($"LAND  wx={wx} wy={wy} terrain={t} biome={ch.Biome[i]} region={ch.Region[i]} sub={ch.SubRegion[i]}");
+                landLeft--;
+                if (townLeft == 0 && landLeft == 0) break;
+            }
+        }
+
+        if (townLeft == 0 && landLeft == 0) break;
+    }
+
+    return 0;
+}
+
+
 // Debug: count towns directly from the world data
 int townTiles = 0;
 for (int y = 0; y < world.Height; y++)
