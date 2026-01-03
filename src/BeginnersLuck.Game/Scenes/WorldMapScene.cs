@@ -9,6 +9,7 @@ using BeginnersLuck.Engine.Update;
 using BeginnersLuck.Engine.World;
 using BeginnersLuck.Game.Encounters;
 using BeginnersLuck.Game.Services;
+using BeginnersLuck.Game.State;
 using BeginnersLuck.Game.World;
 using BeginnersLuck.WorldGen;
 using BeginnersLuck.WorldGen.Data;
@@ -53,7 +54,8 @@ public sealed class WorldMapScene : SceneBase
 
     // Actual WorldGen runtime world (needed for local generation)
     private BeginnersLuck.WorldGen.WorldMap? _worldMap;
-    private Dir _lastWorldMoveDir = Dir.North; // default doesn’t matter much
+
+    private Dir _lastWorldMoveDir = Dir.North;
     private readonly CameraZoom.State _zoom = new() { MinZoom = 0.5f, MaxZoom = 3.0f, Step = 0.12f };
 
     public WorldMapScene(GameServices s)
@@ -66,7 +68,6 @@ public sealed class WorldMapScene : SceneBase
         _white = new Texture2D(graphicsDevice, 1, 1);
         _white.SetData(new[] { Color.White });
 
-        // 1) Load generated world.json from repo-root Worlds folder
         int seed = _s.World.WorldSeed;
         string worldJson = WorldPaths.WorldJsonPath(seed);
 
@@ -85,7 +86,6 @@ public sealed class WorldMapScene : SceneBase
         int h = _world.Height;
         int cs = _world.ChunkSize;
 
-        // 2) Flatten terrain + flags from chunks
         _terrainFlat = new byte[w * h];
         _flagsFlat = new ushort[w * h];
 
@@ -107,53 +107,39 @@ public sealed class WorldMapScene : SceneBase
                 int i = wx + wy * w;
 
                 _terrainFlat[i] = (byte)ch.Terrain[local];
-                _flagsFlat[i] = (ushort)ch.Flags[local]; // <-- IMPORTANT: keep ushort, do NOT cast to byte
+                _flagsFlat[i] = (ushort)ch.Flags[local];
             }
-            
         }
 
-        // 3) Build render map + collision
         const int tileSize = 32;
         _map = new TileMap(w, h, tileSize, new int[w * h]);
-        if (_map.IsSolidCell(_playerCell.X, _playerCell.Y))
-        {
-            _playerCell = FindNearestWalkable(_playerCell, w, h);
-        }
 
         for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-            {
-                int i = x + y * w;
-                var tid = (TileId)_terrainFlat[i];
-                var flags = (TileFlags)_flagsFlat[i];
+        for (int x = 0; x < w; x++)
+        {
+            int i = x + y * w;
+            var tid = (TileId)_terrainFlat[i];
+            var flags = (TileFlags)_flagsFlat[i];
 
-                _map.Tiles[i] = WorldTilePalette.ToTileIndex(tid);
+            _map.Tiles[i] = WorldTilePalette.ToTileIndex(tid);
 
-                // WORLD-MAP collision must consider FLAGS too (coast ring trap)
-                bool solid =
-                    WorldTilePalette.IsSolid(tid) ||
-                    (flags & TileFlags.Coast) != 0 ||
-                    (flags & TileFlags.Cliff) != 0; // if you use cliffs on world
+            bool solid =
+                WorldTilePalette.IsSolid(tid) ||
+                (flags & TileFlags.Coast) != 0 ||
+                (flags & TileFlags.Cliff) != 0;
 
-                _map.SetSolidCell(x, y, solid);
+            _map.SetSolidCell(x, y, solid);
+        }
 
-            }
-
-
-        // 4) Renderer
         var tex = _s.Raw.LoadTexture("Textures/tiles.png");
         _tileset = new TileSet(tex, tileSize);
         _mapRenderer = new TileMapRenderer(_tileset);
 
-        // 5) Build a real WorldMap for LocalMapCache / LocalMapGenerator
         _worldMap = BuildWorldMap(_world);
 
-        // 6) Start player near center on walkable cell
         _playerCell = new Point(w / 2, h / 2);
 
-        // Require a spawn that isn't trapped in a sealed pocket.
-        // minRegionSize: tune for your world size. These are sane starters.
-        int minRegion = Math.Max(800, (w * h) / 50); // ~2% of map or 800
+        int minRegion = Math.Max(800, (w * h) / 50);
         int maxR = Math.Max(w, h);
 
         _playerCell = BeginnersLuck.Game.World.WorldSpawnResolver.FindPlayableSpawn(
@@ -163,10 +149,6 @@ public sealed class WorldMapScene : SceneBase
             minRegionSize: minRegion,
             requireTouchesEdge: true);
 
-        _cam.Position = _map.CellToWorldCenter(_playerCell);
-
-
-        // 7) Camera start
         _cam.Position = _map.CellToWorldCenter(_playerCell);
     }
 
@@ -189,10 +171,12 @@ public sealed class WorldMapScene : SceneBase
     {
         if (_map == null) return;
 
+        // ✅ If we just popped back from local, consume the pending exit once.
+        ConsumePendingLocalExit();
+
         var ks = Keyboard.GetState();
         var pad = GamePad.GetState(PlayerIndex.One);
 
-        // Toast active: tick + block input
         if (_toastActive)
         {
             _toastT += (float)uc.GameTime.ElapsedGameTime.TotalSeconds;
@@ -214,7 +198,6 @@ public sealed class WorldMapScene : SceneBase
             return;
         }
 
-        // Pause (Esc/Start/Back)
         if (Pressed(ks, Keys.Escape) || Pressed(pad, Buttons.Start) || Pressed(pad, Buttons.Back))
         {
             _s.Scenes.Push(new PauseScene(_s));
@@ -223,7 +206,6 @@ public sealed class WorldMapScene : SceneBase
             return;
         }
 
-        // Hub/Menu (Tab / Y)
         if (Pressed(ks, Keys.Tab) || Pressed(pad, Buttons.Y))
         {
             _s.Scenes.Push(new MenuHubScene(_s, ks, startTab: 0));
@@ -232,7 +214,6 @@ public sealed class WorldMapScene : SceneBase
             return;
         }
 
-        // Movement (edge-triggered, grid step)
         Point dir = Point.Zero;
 
         if (Pressed(ks, Keys.W) || Pressed(ks, Keys.Up)) dir = new Point(0, -1);
@@ -257,7 +238,6 @@ public sealed class WorldMapScene : SceneBase
                 {
                     _playerCell = next;
 
-                    // Only update when the move actually happened
                     if (dir.X == 1) _lastWorldMoveDir = Dir.East;
                     else if (dir.X == -1) _lastWorldMoveDir = Dir.West;
                     else if (dir.Y == 1) _lastWorldMoveDir = Dir.South;
@@ -267,11 +247,6 @@ public sealed class WorldMapScene : SceneBase
                     _s.Toasts.Push("Blocked.", 0.35f);
             }
         }
-
-        if (dir.X == 1) _lastWorldMoveDir = Dir.East;
-        if (dir.X == -1) _lastWorldMoveDir = Dir.West;
-        if (dir.Y == 1) _lastWorldMoveDir = Dir.South;
-        if (dir.Y == -1) _lastWorldMoveDir = Dir.North;
 
         // DEV: jump into known-good local map (seed777 local_262_20)
         if (Pressed(ks, Keys.F9) || Pressed(pad, Buttons.RightStick))
@@ -320,6 +295,7 @@ public sealed class WorldMapScene : SceneBase
                 localSize: 128,
                 purpose: purpose
             );
+
             var spawn = new SpawnRequest(SpawnIntent.EnterFromRoad, IncomingDir: Opposite(_lastWorldMoveDir));
 
             if (!_s.Fade.Active)
@@ -329,15 +305,53 @@ public sealed class WorldMapScene : SceneBase
             _prevPad = pad;
             return;
         }
+
         CameraZoom.ApplyMouseWheel(_cam, _zoom, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
         CameraZoom.ApplyBumpers(_cam, _zoom, pad, _prevPad, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
 
-
-        // Camera follow
         _cam.Position = _map.CellToWorldCenter(_playerCell);
 
         _prevKs = ks;
         _prevPad = pad;
+    }
+
+    private void ConsumePendingLocalExit()
+    {
+        var pending = _s.World.Travel.PendingLocalExit;
+        if (pending == null) return;
+
+        _s.World.Travel.PendingLocalExit = null;
+
+        // Base is the world tile the local belonged to
+        var from = new Point(pending.FromWorldX, pending.FromWorldY);
+
+        var step = pending.ExitDir switch
+        {
+            Dir.North => new Point(0, -1),
+            Dir.South => new Point(0, 1),
+            Dir.East => new Point(1, 0),
+            Dir.West => new Point(-1, 0),
+            _ => Point.Zero
+        };
+
+        var dest = from + step;
+
+        // Try to move one tile outward in the exit direction.
+        // If it’s invalid or solid, fallback to "from".
+        if (_map != null)
+        {
+            if ((uint)dest.X >= (uint)_map.Width || (uint)dest.Y >= (uint)_map.Height || _map.IsSolidCell(dest.X, dest.Y))
+                dest = from;
+        }
+
+        _playerCell = dest;
+        _lastWorldMoveDir = pending.ExitDir;
+
+        if (_map != null)
+            _cam.Position = _map.CellToWorldCenter(_playerCell);
+
+        // Optional toast for clarity during dev
+        _s.Toasts.Push($"Exit {pending.ExitDir} -> WORLD {_playerCell.X},{_playerCell.Y}", 0.6f);
     }
 
     protected override void DrawWorld(RenderContext rc)
@@ -359,7 +373,6 @@ public sealed class WorldMapScene : SceneBase
 
         _mapRenderer.Draw(sb, _map, view);
 
-        // Player marker
         var pos = _map.CellToWorldTopLeft(_playerCell);
         sb.Draw(_white, new Rectangle((int)pos.X + 2, (int)pos.Y + 2, 12, 12), Color.Gold);
 
@@ -373,18 +386,17 @@ public sealed class WorldMapScene : SceneBase
         var sb = rc.SpriteBatch;
         sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
 
-        // HUD panel
         var hud = new Rectangle(8, 8, 260, 52);
         sb.Draw(_white, hud, new Color(10, 10, 18) * 0.75f);
 
         _s.UiFont.Draw(sb, $"GOLD: {_s.Player.Gold}", new Vector2(hud.X + 8, hud.Y + 8), Color.White * 0.9f, 1);
         _s.UiFont.Draw(sb, $"XP:   {_s.Player.TotalXp}", new Vector2(hud.X + 8, hud.Y + 18), Color.White * 0.9f, 1);
+
         if (_world != null && _terrainFlat != null && _flagsFlat != null && _map != null)
         {
             int idx = _playerCell.X + _playerCell.Y * _world.Width;
             var tid = (TileId)_terrainFlat[idx];
             var flags = (TileFlags)_flagsFlat[idx];
-            bool solid = _map.IsSolidCell(_playerCell.X, _playerCell.Y);
 
             _s.UiFont.Draw(sb,
                 $"WORLD: {_playerCell.X},{_playerCell.Y}  {tid}  {_flagsFlat[idx]}  solid={_map.IsSolidCell(_playerCell.X, _playerCell.Y)}  tileIndex={idx}",
@@ -392,78 +404,42 @@ public sealed class WorldMapScene : SceneBase
                 Color.White * 0.75f, 1);
         }
 
-
         sb.End();
     }
 
-    private Point FindNearestWalkable(Point start, int w, int h)
-    {
-        if (_map == null) return start;
-
-        if (!_map.IsSolidCell(start.X, start.Y))
-            return start;
-
-        for (int r = 1; r < 128; r++)
-        {
-            for (int dy = -r; dy <= r; dy++)
-            for (int dx = -r; dx <= r; dx++)
-            {
-                int x = start.X + dx;
-                int y = start.Y + dy;
-                if ((uint)x >= (uint)w || (uint)y >= (uint)h) continue;
-
-                if (!_map.IsSolidCell(x, y))
-                    return new Point(x, y);
-            }
-        }
-
-        return start;
-    }
-
     private static BeginnersLuck.WorldGen.WorldMap BuildWorldMap(WorldDto dto)
-{
-    var wm = new BeginnersLuck.WorldGen.WorldMap
     {
-        Width = dto.Width,
-        Height = dto.Height,
-        ChunkSize = dto.ChunkSize,
-        Seed = dto.Seed,
-        GeneratorVersion = dto.GeneratorVersion
-    };
-
-    int cs = dto.ChunkSize;
-    int n = cs * cs;
-
-    foreach (var ch in dto.Chunks)
-    {
-        // IMPORTANT: match your Chunk ctor signature
-        var c = new BeginnersLuck.WorldGen.Data.Chunk(cs, ch.Cx, ch.Cy);
-
-        // Copy arrays (fast + safe)
-        // Terrain + Flags + Biome are the critical ones for local generation.
-        for (int i = 0; i < n; i++)
+        var wm = new BeginnersLuck.WorldGen.WorldMap
         {
-            c.Terrain[i] = (TileId)ch.Terrain[i];
-            c.Flags[i]   = (TileFlags)ch.Flags[i];
+            Width = dto.Width,
+            Height = dto.Height,
+            ChunkSize = dto.ChunkSize,
+            Seed = dto.Seed,
+            GeneratorVersion = dto.GeneratorVersion
+        };
 
-            c.Biome[i]   = (BiomeId)ch.Biome[i];
+        int cs = dto.ChunkSize;
+        int n = cs * cs;
 
-            // Region/SubRegion are ushort already in Chunk.
-            c.Region[i]    = (ushort)ch.Region[i];
-            c.SubRegion[i] = (ushort)ch.SubRegion[i];
+        foreach (var ch in dto.Chunks)
+        {
+            var c = new BeginnersLuck.WorldGen.Data.Chunk(cs, ch.Cx, ch.Cy);
 
-            // If your DTO includes these, copy them too:
-            // c.Elevation[i] = ch.Elevation[i];
-            // c.Moisture[i] = ch.Moisture[i];
-            // c.Temperature[i] = ch.Temperature[i];
+            for (int i = 0; i < n; i++)
+            {
+                c.Terrain[i] = (TileId)ch.Terrain[i];
+                c.Flags[i]   = (TileFlags)ch.Flags[i];
+                c.Biome[i]   = (BiomeId)ch.Biome[i];
+
+                c.Region[i]    = (ushort)ch.Region[i];
+                c.SubRegion[i] = (ushort)ch.SubRegion[i];
+            }
+
+            wm.SetChunk(ch.Cx, ch.Cy, c);
         }
 
-        wm.SetChunk(ch.Cx, ch.Cy, c);
+        return wm;
     }
-
-    return wm;
-}
-
 
     private void StartEncounterToast(EncounterDef enc, KeyboardState ks, GamePadState pad)
     {
@@ -473,6 +449,7 @@ public sealed class WorldMapScene : SceneBase
         _toastSeedKs = ks;
         _toastSeedPad = pad;
     }
+
     private static Dir Opposite(Dir d) => d switch
     {
         Dir.North => Dir.South,
