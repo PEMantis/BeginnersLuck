@@ -4,7 +4,7 @@ using BeginnersLuck.Engine.World;
 using BeginnersLuck.WorldGen.Data;
 using BeginnersLuck.WorldGen.Local;
 
-namespace BeginnersLuck.WorldGen;
+namespace BeginnersLuck.Game.World;
 
 public static class LocalMapValidator
 {
@@ -13,12 +13,13 @@ public static class LocalMapValidator
         int WalkableCount,
         int LargestRegion,
         bool LargestTouchesEdge,
+        int LargestEdgeRegion,
         int RoadCount,
         string Reason);
 
     /// <summary>
     /// Walkability rule MUST match what LocalMapScene treats as solid.
-    /// Rivers are overlays for now (NOT blocking).
+    /// Keep this as the single source of truth for "can stand / can traverse".
     /// </summary>
     public static bool IsWalkable(LocalMapData m, int x, int y)
     {
@@ -28,7 +29,7 @@ public static class LocalMapValidator
         var tid = m.Terrain[i];
         var flags = m.Flags[i];
 
-        // Terrain blocks
+        // Terrain blocks (authoritative)
         if (tid is TileId.DeepWater or TileId.ShallowWater or TileId.Ocean or TileId.Coast or TileId.Mountain)
             return false;
 
@@ -36,7 +37,12 @@ public static class LocalMapValidator
         if ((flags & TileFlags.Cliff) != 0)
             return false;
 
-        // Rivers intentionally NOT blocked yet (overlay).
+        // NOTE:
+        // Rivers: decide policy.
+        // If rivers are currently "visual overlay only", keep them walkable.
+        // If you want rivers to block until you add bridges, uncomment next line:
+        // if ((flags & TileFlags.River) != 0) return false;
+
         return true;
     }
 
@@ -59,22 +65,26 @@ public static class LocalMapValidator
         }
 
         if (walkable == 0)
-            return new Report(false, 0, 0, false, roads, "No walkable tiles.");
+            return new Report(false, 0, 0, false, 0, roads, "No walkable tiles.");
 
-        // Largest connected walkable component + does it touch edge?
+        // Connected components of walkable cells.
+        // Track:
+        // - largest component overall
+        // - largest component that touches the edge (escape guarantee)
         var seen = new bool[total];
         int largest = 0;
         bool largestTouchesEdge = false;
+        int largestEdge = 0;
 
         for (int y = 0; y < n; y++)
         for (int x = 0; x < n; x++)
         {
-            int idx = x + y * n;
-            if (seen[idx]) continue;
+            int startIdx = x + y * n;
+            if (seen[startIdx]) continue;
 
             if (!IsWalkable(m, x, y))
             {
-                seen[idx] = true;
+                seen[startIdx] = true;
                 continue;
             }
 
@@ -83,7 +93,7 @@ public static class LocalMapValidator
 
             var q = new Queue<(int x, int y)>();
             q.Enqueue((x, y));
-            seen[idx] = true;
+            seen[startIdx] = true;
 
             while (q.Count > 0)
             {
@@ -104,6 +114,9 @@ public static class LocalMapValidator
                 largest = size;
                 largestTouchesEdge = touchesEdge;
             }
+
+            if (touchesEdge && size > largestEdge)
+                largestEdge = size;
 
             void Try(int xx, int yy)
             {
@@ -126,23 +139,25 @@ public static class LocalMapValidator
         int minLargest = Math.Max(600, total / 20); // >= 5% or 600
 
         if (largest < minLargest)
-            return new Report(false, walkable, largest, largestTouchesEdge, roads,
+            return new Report(false, walkable, largest, largestTouchesEdge, largestEdge, roads,
                 $"Largest walkable region too small ({largest} < {minLargest}).");
 
-        // Touching edge is a great proxy for "not trapped in a bowl"
-        if (!largestTouchesEdge)
-            return new Report(false, walkable, largest, false, roads,
-                "Largest region does not touch edge (likely trapped pocket).");
+        // The key fix:
+        // Require a sufficiently-large EDGE-CONNECTED region.
+        // This prevents "sealed bowls" from ever being considered playable.
+        if (largestEdge < minLargest)
+            return new Report(false, walkable, largest, largestTouchesEdge, largestEdge, roads,
+                $"No sufficiently-large edge-connected region ({largestEdge} < {minLargest}) - likely trapped pocket.");
 
-        // If it's a town, we expect at least some roads
+        // If it's a town, we expect at least some roads (global count for now)
         if (purpose == LocalMapPurpose.Town)
         {
             int minRoad = Math.Max(30, total / 200); // ~0.5% or 30
             if (roads < minRoad)
-                return new Report(false, walkable, largest, largestTouchesEdge, roads,
+                return new Report(false, walkable, largest, largestTouchesEdge, largestEdge, roads,
                     $"Town has too few road tiles ({roads} < {minRoad}).");
         }
 
-        return new Report(true, walkable, largest, largestTouchesEdge, roads, "OK");
+        return new Report(true, walkable, largest, largestTouchesEdge, largestEdge, roads, "OK");
     }
 }

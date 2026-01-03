@@ -108,23 +108,36 @@ public sealed class WorldMapScene : SceneBase
                 _terrainFlat[i] = (byte)ch.Terrain[local];
                 _flagsFlat[i] = (ushort)ch.Flags[local]; // <-- IMPORTANT: keep ushort, do NOT cast to byte
             }
+            
         }
 
         // 3) Build render map + collision
         const int tileSize = 16;
         _map = new TileMap(w, h, tileSize, new int[w * h]);
+        if (_map.IsSolidCell(_playerCell.X, _playerCell.Y))
+        {
+            _playerCell = FindNearestWalkable(_playerCell, w, h);
+        }
 
         for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++)
-        {
-            int i = x + y * w;
-            var tid = (TileId)_terrainFlat[i];
+            for (int x = 0; x < w; x++)
+            {
+                int i = x + y * w;
+                var tid = (TileId)_terrainFlat[i];
+                var flags = (TileFlags)_flagsFlat[i];
 
-            _map.Tiles[i] = WorldTilePalette.ToTileIndex(tid);
+                _map.Tiles[i] = WorldTilePalette.ToTileIndex(tid);
 
-            if (WorldTilePalette.IsSolid(tid))
-                _map.SetSolidCell(x, y, true);
-        }
+                // WORLD-MAP collision must consider FLAGS too (coast ring trap)
+                bool solid =
+                    WorldTilePalette.IsSolid(tid) ||
+                    (flags & TileFlags.Coast) != 0 ||
+                    (flags & TileFlags.Cliff) != 0; // if you use cliffs on world
+
+                _map.SetSolidCell(x, y, solid);
+
+            }
+
 
         // 4) Renderer
         var tex = _s.Raw.LoadTexture("Textures/tiles.png");
@@ -136,7 +149,21 @@ public sealed class WorldMapScene : SceneBase
 
         // 6) Start player near center on walkable cell
         _playerCell = new Point(w / 2, h / 2);
-        _playerCell = FindNearestWalkable(_playerCell, w, h);
+
+        // Require a spawn that isn't trapped in a sealed pocket.
+        // minRegionSize: tune for your world size. These are sane starters.
+        int minRegion = Math.Max(800, (w * h) / 50); // ~2% of map or 800
+        int maxR = Math.Max(w, h);
+
+        _playerCell = BeginnersLuck.Game.World.WorldSpawnResolver.FindPlayableSpawn(
+            map: _map!,
+            preferred: _playerCell,
+            maxSearchRadius: maxR,
+            minRegionSize: minRegion,
+            requireTouchesEdge: true);
+
+        _cam.Position = _map.CellToWorldCenter(_playerCell);
+
 
         // 7) Camera start
         _cam.Position = _map.CellToWorldCenter(_playerCell);
@@ -235,6 +262,8 @@ public sealed class WorldMapScene : SceneBase
                     else if (dir.Y == 1) _lastWorldMoveDir = Dir.South;
                     else if (dir.Y == -1) _lastWorldMoveDir = Dir.North;
                 }
+                else
+                    _s.Toasts.Push("Blocked.", 0.35f);
             }
         }
 
@@ -346,7 +375,19 @@ public sealed class WorldMapScene : SceneBase
 
         _s.UiFont.Draw(sb, $"GOLD: {_s.Player.Gold}", new Vector2(hud.X + 8, hud.Y + 8), Color.White * 0.9f, 1);
         _s.UiFont.Draw(sb, $"XP:   {_s.Player.TotalXp}", new Vector2(hud.X + 8, hud.Y + 18), Color.White * 0.9f, 1);
-        _s.UiFont.Draw(sb, $"WORLD: {_playerCell.X},{_playerCell.Y}", new Vector2(hud.X + 8, hud.Y + 32), Color.White * 0.75f, 1);
+        if (_world != null && _terrainFlat != null && _flagsFlat != null && _map != null)
+        {
+            int idx = _playerCell.X + _playerCell.Y * _world.Width;
+            var tid = (TileId)_terrainFlat[idx];
+            var flags = (TileFlags)_flagsFlat[idx];
+            bool solid = _map.IsSolidCell(_playerCell.X, _playerCell.Y);
+
+            _s.UiFont.Draw(sb,
+                $"WORLD: {_playerCell.X},{_playerCell.Y}  {tid}  {_flagsFlat[idx]}  solid={_map.IsSolidCell(_playerCell.X, _playerCell.Y)}  tileIndex={idx}",
+                new Vector2(hud.X + 8, hud.Y + 32),
+                Color.White * 0.75f, 1);
+        }
+
 
         sb.End();
     }

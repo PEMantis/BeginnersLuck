@@ -4,37 +4,29 @@ namespace BeginnersLuck.Game.World;
 
 public static class LocalTilePalette
 {
-    // WorldGen TileId -> tileset tile index
+    // Tile indices based on tiles.png layout
+    private const int GRASS = 0;
+    private const int DIRT  = 1;
+    private const int WATER = 2;
+    private const int ROCK  = 3;
+
     public static int ToTileIndex(TileId id) => id switch
     {
-        TileId.DeepWater    => 1,
-        TileId.Ocean        => 1,
+        TileId.Grass        => GRASS,
+        TileId.Dirt         => DIRT,
+        TileId.Sand         => DIRT,
+        TileId.Swamp        => DIRT,
 
-        TileId.ShallowWater => 2,
-        TileId.Coast        => 2,
+        TileId.ShallowWater => WATER,
+        TileId.DeepWater    => WATER,
+        TileId.Ocean        => WATER,
+        TileId.Coast        => WATER,
 
-        TileId.Sand         => 3,
-        TileId.Grass        => 4,
-        TileId.Dirt         => 5,
+        TileId.Rock         => ROCK,
+        TileId.Hill         => ROCK,
+        TileId.Mountain     => ROCK,
+        TileId.Snow         => ROCK,
 
-        TileId.Rock         => 6,
-        TileId.Hill         => 6,
-        TileId.Mountain     => 6,
-
-        TileId.Snow         => 7,
-        TileId.Swamp        => 8,
-
-        _ => 0
-    };
-
-    // WorldGen gameplay truth (authoritative)
-    public static bool IsSolid(TileId id) => id switch
-    {
-        TileId.DeepWater    => true,
-        TileId.ShallowWater => true,
-        TileId.Ocean        => true,
-        TileId.Coast        => true,
-        TileId.Mountain     => true,
-        _ => false
+        _ => GRASS
     };
 }

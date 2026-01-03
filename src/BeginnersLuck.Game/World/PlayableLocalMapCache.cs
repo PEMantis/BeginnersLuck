@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using BeginnersLuck.Engine.World;
+using BeginnersLuck.Game.World;
 using BeginnersLuck.WorldGen.Local;
 
 namespace BeginnersLuck.WorldGen;
