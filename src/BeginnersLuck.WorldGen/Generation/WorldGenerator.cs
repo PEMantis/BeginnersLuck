@@ -42,9 +42,10 @@ public sealed class WorldGenerator : IWorldGenerator
 
         // 3) regions depend on final land/water
         .Add(new RegionStep())
-
+        .Add(new SubRegionStep())
         // 4) towns depend on rivers, coast, biomes, regions
-        .Add(new TownPlacementStep());
+        .Add(new TownPlacementStep())
+        .Add(new RoadStep());
 
         pipeline.Run(ctx);
         return map;

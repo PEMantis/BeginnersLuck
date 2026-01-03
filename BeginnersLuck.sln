@@ -15,6 +15,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BeginnersLuck.WorldGen.Tests", "tests\BeginnersLuck.WorldGen.Tests\BeginnersLuck.WorldGen.Tests.csproj", "{8D1B2B31-3DF7-4EEF-BF27-AB5F5E43BE7E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BeginnersLuck.Game", "src\BeginnersLuck.Game\BeginnersLuck.Game.csproj", "{04C19BAB-3041-4EE0-8D32-D47902765DE1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -73,6 +75,18 @@ Global
 		{8D1B2B31-3DF7-4EEF-BF27-AB5F5E43BE7E}.Release|x64.Build.0 = Release|Any CPU
 		{8D1B2B31-3DF7-4EEF-BF27-AB5F5E43BE7E}.Release|x86.ActiveCfg = Release|Any CPU
 		{8D1B2B31-3DF7-4EEF-BF27-AB5F5E43BE7E}.Release|x86.Build.0 = Release|Any CPU
+		{04C19BAB-3041-4EE0-8D32-D47902765DE1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{04C19BAB-3041-4EE0-8D32-D47902765DE1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{04C19BAB-3041-4EE0-8D32-D47902765DE1}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{04C19BAB-3041-4EE0-8D32-D47902765DE1}.Debug|x64.Build.0 = Debug|Any CPU
+		{04C19BAB-3041-4EE0-8D32-D47902765DE1}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{04C19BAB-3041-4EE0-8D32-D47902765DE1}.Debug|x86.Build.0 = Debug|Any CPU
+		{04C19BAB-3041-4EE0-8D32-D47902765DE1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{04C19BAB-3041-4EE0-8D32-D47902765DE1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{04C19BAB-3041-4EE0-8D32-D47902765DE1}.Release|x64.ActiveCfg = Release|Any CPU
+		{04C19BAB-3041-4EE0-8D32-D47902765DE1}.Release|x64.Build.0 = Release|Any CPU
+		{04C19BAB-3041-4EE0-8D32-D47902765DE1}.Release|x86.ActiveCfg = Release|Any CPU
+		{04C19BAB-3041-4EE0-8D32-D47902765DE1}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -82,5 +96,6 @@ Global
 		{95723B8A-E8F0-4087-8ECE-0B24D3607FC5} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{5B9D09E3-1ACE-4CA0-957D-6C97669728A8} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{8D1B2B31-3DF7-4EEF-BF27-AB5F5E43BE7E} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{04C19BAB-3041-4EE0-8D32-D47902765DE1} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

@@ -8,6 +8,7 @@
     ".NETCoreApp,Version=v9.0": {
       "BeginnersLuck.Engine/1.0.0": {
         "dependencies": {
+          "BeginnersLuck.WorldGen": "1.0.0",
           "MonoGame.Framework.DesktopGL": "3.8.4.1",
           "StbTrueTypeSharp": "1.26.12"
         },
@@ -127,7 +128,15 @@
         }
       },
       "System.Memory/4.5.3": {},
-      "System.ValueTuple/4.5.0": {}
+      "System.ValueTuple/4.5.0": {},
+      "BeginnersLuck.WorldGen/1.0.0": {
+        "runtime": {
+          "BeginnersLuck.WorldGen.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
     }
   },
   "libraries": {
@@ -184,6 +193,11 @@
       "sha512": "sha512-okurQJO6NRE/apDIP23ajJ0hpiNmJ+f0BwOlB/cSqTLQlw5upkf+5+96+iG2Jw40G1fCVCyPz/FhIABUjMR+RQ==",
       "path": "system.valuetuple/4.5.0",
       "hashPath": "system.valuetuple.4.5.0.nupkg.sha512"
+    },
+    "BeginnersLuck.WorldGen/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
     }
   }
 }

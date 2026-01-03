@@ -9,6 +9,7 @@
       "BeginnersLuck.Game/1.0.0": {
         "dependencies": {
           "BeginnersLuck.Engine": "1.0.0",
+          "BeginnersLuck.WorldGen": "1.0.0",
           "MonoGame.Framework.DesktopGL": "3.8.4.1"
         },
         "runtime": {
@@ -130,11 +131,20 @@
       "System.ValueTuple/4.5.0": {},
       "BeginnersLuck.Engine/1.0.0": {
         "dependencies": {
+          "BeginnersLuck.WorldGen": "1.0.0",
           "MonoGame.Framework.DesktopGL": "3.8.4.1",
           "StbTrueTypeSharp": "1.26.12"
         },
         "runtime": {
           "BeginnersLuck.Engine.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "BeginnersLuck.WorldGen/1.0.0": {
+        "runtime": {
+          "BeginnersLuck.WorldGen.dll": {
             "assemblyVersion": "1.0.0.0",
             "fileVersion": "1.0.0.0"
           }
@@ -198,6 +208,11 @@
       "hashPath": "system.valuetuple.4.5.0.nupkg.sha512"
     },
     "BeginnersLuck.Engine/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "BeginnersLuck.WorldGen/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

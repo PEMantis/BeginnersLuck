@@ -47,6 +47,8 @@ public sealed class GameServices
     public PlayerState Player { get; }
     public ItemDb Items { get; }
 
+    public WorldState World { get; }
+
     public GameServices(
         PixelRenderer pixel,
         SceneManager scenes,
@@ -60,7 +62,8 @@ public sealed class GameServices
         Random rng,
         EncounterDirector encounters,
         PlayerState player,
-        ItemDb items)
+        ItemDb items,
+        WorldState world)
     {
         Pixel = pixel;
         Scenes = scenes;
@@ -78,5 +81,6 @@ public sealed class GameServices
         EncounterDirector = encounters;
         Player = player;
         Items = items;
+        World = world;
     }
 }

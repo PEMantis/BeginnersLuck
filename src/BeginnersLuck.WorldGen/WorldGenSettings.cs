@@ -46,5 +46,10 @@ public sealed record WorldGenSettings
     public int TownCoastBias { get; init; } = 40;          // score points
     public int TownRiverBias { get; init; } = 55;          // score points
     public int TownPlainsBias { get; init; } = 35;         // score points
+                                                           // Sub-regions
+    public int SubRegionTargetTileCount { get; init; } = 9000;   // ~how big each subregion is
+    public int SubRegionMinSeedsPerRegion { get; init; } = 3;
+    public int SubRegionMaxSeedsPerRegion { get; init; } = 10;
+
 
 }

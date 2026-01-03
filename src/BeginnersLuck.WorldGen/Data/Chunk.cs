@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using BeginnersLuck.WorldGen.Data;
 
 namespace BeginnersLuck.WorldGen.Data;
@@ -17,6 +18,7 @@ public sealed class Chunk
 
     public BiomeId[] Biome { get; }
     public ushort[] Region { get; }
+    public ushort[] SubRegion { get; }
 
     public Chunk(int chunkSize, int cx, int cy)
     {
@@ -33,6 +35,7 @@ public sealed class Chunk
         Flags = new TileFlags[n];
         Biome = new BiomeId[n];
         Region = new ushort[n];
+        SubRegion = new ushort[n];
     }
 
     public int Index(int lx, int ly) => (ly * ChunkSize) + lx;

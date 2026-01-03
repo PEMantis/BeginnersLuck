@@ -18,6 +18,61 @@ public static class WorldPngDump
         WriteTerrain(Path.Combine(outDir, "terrain.png"), map);
         WriteBiome(Path.Combine(outDir, "biome.png"), map);
         WriteRegions(Path.Combine(outDir, "regions.png"), map);
+        WriteSubRegions(Path.Combine(outDir, "subregions.png"), map);
+        WriteRoads(Path.Combine(outDir, "roads.png"), map);
+
+    }
+
+    private static void WriteRoads(string path, WorldMap map)
+    {
+        using var img = new Image<Rgba32>(map.Width, map.Height);
+        int cs = map.ChunkSize;
+
+        // base: reuse terrain colors (no towns/rivers necessary, but helpful)
+        for (int y = 0; y < map.Height; y++)
+        {
+            int cy = y / cs;
+            int ly = y % cs;
+
+            for (int x = 0; x < map.Width; x++)
+            {
+                int cx = x / cs;
+                int lx = x % cs;
+
+                var chunk = map.GetChunk(cx, cy);
+                int idx = (ly * cs) + lx;
+
+                img[x, y] = TerrainColor(chunk.Terrain[idx]);
+
+                if ((chunk.Flags[idx] & TileFlags.River) != 0)
+                    img[x, y] = new Rgba32(70, 140, 220, 255);
+            }
+        }
+
+        // overlay roads
+        var roadColor = new Rgba32(235, 140, 40, 255);
+        for (int y = 0; y < map.Height; y++)
+        {
+            int cy = y / cs;
+            int ly = y % cs;
+
+            for (int x = 0; x < map.Width; x++)
+            {
+                int cx = x / cs;
+                int lx = x % cs;
+
+                var chunk = map.GetChunk(cx, cy);
+                int idx = (ly * cs) + lx;
+
+                if ((chunk.Flags[idx] & TileFlags.Road) != 0)
+                    img[x, y] = roadColor;
+
+                if ((chunk.Flags[idx] & TileFlags.Town) != 0)
+                    StampDot(img, x, y, 3, new Rgba32(255, 215, 0, 255));
+            }
+        }
+
+        img.Save(path);
     }
 
     private static void WriteGrayscale(string path, WorldMap map, Func<Chunk, byte[]> selector)
@@ -52,8 +107,35 @@ public static class WorldPngDump
     private static void WriteTerrain(string path, WorldMap map)
     {
         using var img = new Image<Rgba32>(map.Width, map.Height);
-
         int cs = map.ChunkSize;
+
+        // Pass 1: draw terrain + rivers (no towns yet)
+        for (int y = 0; y < map.Height; y++)
+        {
+            int cy = y / cs;
+            int ly = y % cs;
+
+            for (int x = 0; x < map.Width; x++)
+            {
+                int cx = x / cs;
+                int lx = x % cs;
+
+                var chunk = map.GetChunk(cx, cy);
+                int idx = (ly * cs) + lx;
+
+                img[x, y] = TerrainColor(chunk.Terrain[idx]);
+
+                if ((chunk.Flags[idx] & TileFlags.River) != 0)
+                    img[x, y] = new Rgba32(70, 140, 220, 255);
+
+                if ((chunk.Flags[idx] & TileFlags.RiverSource) != 0)
+                    img[x, y] = new Rgba32(255, 60, 60, 255);
+            }
+        }
+
+        // Pass 2: stamp towns (visible!)
+        var townColor = new Rgba32(255, 215, 0, 255);
+        int radius = 3;
 
         for (int y = 0; y < map.Height; y++)
         {
@@ -68,23 +150,14 @@ public static class WorldPngDump
                 var chunk = map.GetChunk(cx, cy);
                 int idx = (ly * cs) + lx;
 
-                var tile = chunk.Terrain[idx];
-                img[x, y] = TerrainColor(tile);
-
-                // Overlays
-                if ((chunk.Flags[idx] & TileFlags.River) != 0)
-                    img[x, y] = new Rgba32(70, 140, 220, 255);
-
-                if ((chunk.Flags[idx] & TileFlags.RiverSource) != 0)
-                    img[x, y] = new Rgba32(255, 60, 60, 255);
-
                 if ((chunk.Flags[idx] & TileFlags.Town) != 0)
-                    img[x, y] = new Rgba32(255, 215, 0, 255);
+                    StampDot(img, x, y, radius, townColor);
             }
         }
 
         img.Save(path);
     }
+
 
     private static void WriteBiome(string path, WorldMap map)
     {
@@ -149,6 +222,78 @@ public static class WorldPngDump
         }
 
         img.Save(path);
+    }
+
+    private static void WriteSubRegions(string path, WorldMap map)
+    {
+        using var img = new Image<Rgba32>(map.Width, map.Height);
+        int cs = map.ChunkSize;
+
+        for (int y = 0; y < map.Height; y++)
+        {
+            int cy = y / cs;
+            int ly = y % cs;
+
+            for (int x = 0; x < map.Width; x++)
+            {
+                int cx = x / cs;
+                int lx = x % cs;
+
+                var chunk = map.GetChunk(cx, cy);
+                int idx = (ly * cs) + lx;
+
+                ushort sub = chunk.SubRegion[idx];
+
+                img[x, y] = sub == 0
+                    ? new Rgba32(10, 10, 20, 255)
+                    : RegionColor(sub);
+
+                // Optional overlays
+                if ((chunk.Flags[idx] & TileFlags.Town) != 0)
+                    img[x, y] = new Rgba32(255, 215, 0, 255);
+
+                if ((chunk.Flags[idx] & TileFlags.River) != 0)
+                    img[x, y] = new Rgba32(70, 140, 220, 255);
+            }
+        }
+        var townColor = new Rgba32(255, 215, 0, 255);
+        int radius = 3;
+
+        for (int y = 0; y < map.Height; y++)
+        {
+            int cy = y / cs;
+            int ly = y % cs;
+
+            for (int x = 0; x < map.Width; x++)
+            {
+                int cx = x / cs;
+                int lx = x % cs;
+
+                var chunk = map.GetChunk(cx, cy);
+                int idx = (ly * cs) + lx;
+
+                if ((chunk.Flags[idx] & TileFlags.Town) != 0)
+                    StampDot(img, x, y, radius, townColor);
+            }
+        }
+        img.Save(path);
+    }
+    private static void StampDot(Image<Rgba32> img, int x, int y, int r, Rgba32 color)
+    {
+        int w = img.Width;
+        int h = img.Height;
+
+        for (int dy = -r; dy <= r; dy++)
+            for (int dx = -r; dx <= r; dx++)
+            {
+                if (dx * dx + dy * dy > r * r) continue; // circle
+
+                int px = x + dx;
+                int py = y + dy;
+                if ((uint)px >= (uint)w || (uint)py >= (uint)h) continue;
+
+                img[px, py] = color;
+            }
     }
 
     private static Rgba32 TerrainColor(TileId t) => t switch

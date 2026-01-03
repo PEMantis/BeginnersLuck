@@ -28,6 +28,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BeginnersLuck.Engine\BeginnersLuck.Engine.csproj" />
+    <ProjectReference Include="..\BeginnersLuck.WorldGen\BeginnersLuck.WorldGen.csproj" />
   </ItemGroup>
   <ItemGroup>
   <None Include="ContentRaw\**\*.*">

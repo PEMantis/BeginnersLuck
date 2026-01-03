@@ -137,6 +137,7 @@
         "type": "project",
         "framework": ".NETCoreApp,Version=v9.0",
         "dependencies": {
+          "BeginnersLuck.WorldGen": "1.0.0",
           "MonoGame.Framework.DesktopGL": "3.8.4.1",
           "StbTrueTypeSharp": "1.26.12"
         },
@@ -145,6 +146,16 @@
         },
         "runtime": {
           "bin/placeholder/BeginnersLuck.Engine.dll": {}
+        }
+      },
+      "BeginnersLuck.WorldGen/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v9.0",
+        "compile": {
+          "bin/placeholder/BeginnersLuck.WorldGen.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/BeginnersLuck.WorldGen.dll": {}
         }
       }
     }
@@ -306,11 +317,17 @@
       "type": "project",
       "path": "../BeginnersLuck.Engine/BeginnersLuck.Engine.csproj",
       "msbuildProject": "../BeginnersLuck.Engine/BeginnersLuck.Engine.csproj"
+    },
+    "BeginnersLuck.WorldGen/1.0.0": {
+      "type": "project",
+      "path": "../BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj",
+      "msbuildProject": "../BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj"
     }
   },
   "projectFileDependencyGroups": {
     "net9.0": [
       "BeginnersLuck.Engine >= 1.0.0",
+      "BeginnersLuck.WorldGen >= 1.0.0",
       "MonoGame.Framework.DesktopGL >= 3.8.4.1"
     ]
   },
@@ -342,6 +359,9 @@
           "projectReferences": {
             "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/BeginnersLuck.Engine.csproj": {
               "projectPath": "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Engine/BeginnersLuck.Engine.csproj"
+            },
+            "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj": {
+              "projectPath": "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj"
             }
           }
         }

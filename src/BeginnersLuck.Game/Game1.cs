@@ -12,6 +12,7 @@ using BeginnersLuck.Game.Services;
 using BeginnersLuck.Game.Encounters;
 using System;
 using BeginnersLuck.Game.Items;
+using BeginnersLuck.Game.State;
 namespace BeginnersLuck.Game;
 
 public class Game1 : Microsoft.Xna.Framework.Game
@@ -88,6 +89,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var encounterDirector = new EncounterDirector(encounterSource);
         var player = new BeginnersLuck.Game.State.PlayerState();
         var items = BeginnersLuck.Game.Items.DefaultItems.Create();
+        var world = new WorldState { WorldSeed = 777 };
 
         var px = new Texture2D(GraphicsDevice, 1, 1);
         px.SetData(new[] { Color.White });
@@ -108,7 +110,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
             rng: rng,
             encounters: encounterDirector,
             player: player,
-            items: items
+            items: items,
+            world: world
         );
 
         // avoid circular dependency by setting after

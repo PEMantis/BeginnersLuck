@@ -132,6 +132,16 @@
         "runtime": {
           "lib/netcoreapp2.0/_._": {}
         }
+      },
+      "BeginnersLuck.WorldGen/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v9.0",
+        "compile": {
+          "bin/placeholder/BeginnersLuck.WorldGen.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/BeginnersLuck.WorldGen.dll": {}
+        }
       }
     }
   },
@@ -287,10 +297,16 @@
         "useSharedDesignerContext.txt",
         "version.txt"
       ]
+    },
+    "BeginnersLuck.WorldGen/1.0.0": {
+      "type": "project",
+      "path": "../BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj",
+      "msbuildProject": "../BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj"
     }
   },
   "projectFileDependencyGroups": {
     "net9.0": [
+      "BeginnersLuck.WorldGen >= 1.0.0",
       "MonoGame.Framework.DesktopGL >= 3.8.4.1",
       "StbTrueTypeSharp >= 1.26.12"
     ]
@@ -320,7 +336,11 @@
       "frameworks": {
         "net9.0": {
           "targetAlias": "net9.0",
-          "projectReferences": {}
+          "projectReferences": {
+            "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj": {
+              "projectPath": "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj"
+            }
+          }
         }
       },
       "warningProperties": {

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Text.Json;
 using BeginnersLuck.Engine.Graphics;
 using BeginnersLuck.Engine.Rendering;
@@ -9,6 +10,7 @@ using BeginnersLuck.Engine.World;
 using BeginnersLuck.Game.Encounters;
 using BeginnersLuck.Game.Services;
 using BeginnersLuck.Game.World;
+using BeginnersLuck.WorldGen.Local;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
@@ -197,6 +199,42 @@ public sealed class WorldMapScene : SceneBase
                 return;
             }
         }
+
+        // Enter Local Map (E / A)
+        if (Pressed(ks, Keys.E) || Pressed(pad, Buttons.A))
+        {
+            int wx = _playerCell.X;
+            int wy = _playerCell.Y;
+
+            // TODO: once your world map is actually generated, derive this from world flags.
+            // For now: wilderness by default.
+            var purpose = LocalMapPurpose.Wilderness;
+
+            int seed = _s.World.WorldSeed;
+            string localBin = WorldPaths.LocalMapBinPath(seed, wx, wy);
+
+            if (!File.Exists(localBin))
+            {
+                _s.Toasts.Push($"No local map found for ({wx},{wy}). Generate it first.", 1.2f);
+                _prevKs = ks;
+                _prevPad = pad;
+                return;
+            }
+
+            if (!_s.Fade.Active)
+            {
+                _s.Fade.Start(0.25f, () =>
+                {
+                    _s.Scenes.Push(new LocalMapScene(_s, localBin, purpose));
+                });
+            }
+
+            _prevKs = ks;
+            _prevPad = pad;
+            return;
+        }
+
+
 
         // Camera follow (center on player)
         _cam.Position = _map.CellToWorldCenter(_playerCell);

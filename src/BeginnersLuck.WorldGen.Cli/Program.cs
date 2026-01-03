@@ -2,6 +2,9 @@
 using BeginnersLuck.WorldGen.Generation;
 using BeginnersLuck.WorldGen.Serialization;
 using BeginnersLuck.WorldGen.Cli;
+using BeginnersLuck.WorldGen.Data;
+using BeginnersLuck.WorldGen.Local;
+using BeginnersLuck.WorldGen.Local.Export;
 
 static int GetInt(string[] args, string key, int fallback)
 {
@@ -38,6 +41,12 @@ Options:
   --chunk   <int>     Chunk size (default 32)
   --water   <float>   Water percent 0..1 (default 0.55)
   --png               Write debug pngs (elevation/moisture/temp/terrain)
+  --local                 Generate a local map for a world tile
+  --wx <int> --wy <int>   World tile coordinate for local extraction
+  --localsize <int>       Local map size (default 128)
+  --purpose town|wild     Town vs wilderness shaping (default wild)
+  --localpng              Write local pngs (local_terrain/elevation/roads)
+  --exportlocal          Write local.meta.json + local.mapbin for the extracted local map
   --help              Show help
 """);
 }
@@ -71,6 +80,62 @@ var request = new WorldGenRequest(
 
 IWorldGenerator generator = new WorldGenerator();
 var world = generator.Generate(request);
+// Debug: count towns directly from the world data
+int townTiles = 0;
+for (int y = 0; y < world.Height; y++)
+    for (int x = 0; x < world.Width; x++)
+    {
+        int cs = world.ChunkSize;
+        var c = world.GetChunk(x / cs, y / cs);
+        int idx = c.Index(x % cs, y % cs);
+        if ((c.Flags[idx] & TileFlags.Town) != 0) townTiles++;
+    }
+
+
+Console.WriteLine($"Town tiles: {townTiles}");
+
+bool doLocal = Has(argsList, "--local");
+if (doLocal)
+{
+    int wx = GetInt(argsList, "--wx", 0);
+    int wy = GetInt(argsList, "--wy", 0);
+    int localSize = GetInt(argsList, "--localsize", 128);
+
+    string purposeStr = GetString(argsList, "--purpose", "wild");
+    var purpose = purposeStr.Equals("town", StringComparison.OrdinalIgnoreCase)
+        ? LocalMapPurpose.Town
+        : LocalMapPurpose.Wilderness;
+
+    bool localPng = Has(argsList, "--localpng");
+    bool exportLocal = Has(argsList, "--exportlocal");
+
+    var localReq = new LocalMapRequest(
+        WorldX: wx,
+        WorldY: wy,
+        Size: localSize,
+        Seed: seed, // world seed in; LocalMapGenerator derives local seed
+        Purpose: purpose
+    );
+
+    var localGen = new LocalMapGenerator();
+    var localCtx = localGen.GenerateWithContext(world, localReq);
+    var localMap = localCtx.Map;
+
+    string localOut = Path.Combine(outDir, $"local_{wx}_{wy}");
+    Directory.CreateDirectory(localOut);
+
+    if (localPng)
+        LocalPngDump.WriteAll(localOut, localMap);
+
+    if (exportLocal)
+        LocalMapExport.Write(localOut, localCtx);
+
+    Console.WriteLine($"Generated LOCAL map {localMap.Size}x{localMap.Size} for world tile ({wx},{wy}) -> {Path.GetFullPath(localOut)}");
+    if (localPng) Console.WriteLine("Wrote: local_elevation.png, local_terrain.png, local_roads.png");
+    if (exportLocal) Console.WriteLine("Wrote: local.meta.json, local.mapbin");
+}
+
+
 
 Directory.CreateDirectory(outDir);
 
