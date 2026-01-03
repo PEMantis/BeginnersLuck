@@ -54,6 +54,7 @@ public sealed class WorldMapScene : SceneBase
     // Actual WorldGen runtime world (needed for local generation)
     private BeginnersLuck.WorldGen.WorldMap? _worldMap;
     private Dir _lastWorldMoveDir = Dir.North; // default doesn’t matter much
+    private readonly CameraZoom.State _zoom = new() { MinZoom = 0.5f, MaxZoom = 3.0f, Step = 0.12f };
 
     public WorldMapScene(GameServices s)
     {
@@ -112,7 +113,7 @@ public sealed class WorldMapScene : SceneBase
         }
 
         // 3) Build render map + collision
-        const int tileSize = 16;
+        const int tileSize = 32;
         _map = new TileMap(w, h, tileSize, new int[w * h]);
         if (_map.IsSolidCell(_playerCell.X, _playerCell.Y))
         {
@@ -328,6 +329,9 @@ public sealed class WorldMapScene : SceneBase
             _prevPad = pad;
             return;
         }
+        CameraZoom.ApplyMouseWheel(_cam, _zoom, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
+        CameraZoom.ApplyBumpers(_cam, _zoom, pad, _prevPad, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
+
 
         // Camera follow
         _cam.Position = _map.CellToWorldCenter(_playerCell);

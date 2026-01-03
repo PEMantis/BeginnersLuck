@@ -35,6 +35,7 @@ public sealed class LocalMapScene : SceneBase
 
     private KeyboardState _prevKs;
     private GamePadState _prevPad;
+    private readonly CameraZoom.State _zoom = new() { MinZoom = 0.5f, MaxZoom = 4.0f, Step = 0.12f };
 
     public LocalMapScene(GameServices s, string mapBinPath, LocalMapPurpose purpose, SpawnRequest spawn)
     {
@@ -49,7 +50,7 @@ public sealed class LocalMapScene : SceneBase
     {
         _local = LocalMapBinLoader.Load(_mapBinPath);
 
-        const int tileSize = 16;
+        const int tileSize = 32;
 
         var tex = _s.Raw.LoadTexture("Textures/tiles.png");
         _tileset = new TileSet(tex, tileSize);
@@ -148,6 +149,9 @@ public sealed class LocalMapScene : SceneBase
         }
 
         _cam.Position = _map.CellToWorldCenter(_playerCell);
+        CameraZoom.ApplyMouseWheel(_cam, _zoom, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
+        CameraZoom.ApplyBumpers(_cam, _zoom, pad, _prevPad, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
+
 
         _prevKs = ks;
         _prevPad = pad;
