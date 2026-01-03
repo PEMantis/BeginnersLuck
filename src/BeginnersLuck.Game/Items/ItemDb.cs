@@ -32,7 +32,9 @@ public sealed class ItemDb
 
     public bool TryGet(string id, out ItemDef def)
     {
+#pragma warning disable CS8601 // Possible null reference assignment.
         return _defs.TryGetValue(id, out def);
+#pragma warning restore CS8601 // Possible null reference assignment.
     }
 
     public string NameOf(string id)

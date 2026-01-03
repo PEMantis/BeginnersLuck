@@ -1,6 +1,3 @@
-using System.Linq.Expressions;
-using BeginnersLuck.WorldGen.Data;
-
 namespace BeginnersLuck.WorldGen.Data;
 
 public sealed class Chunk

@@ -10,6 +10,8 @@ using BeginnersLuck.Engine.World;
 using BeginnersLuck.Game.Encounters;
 using BeginnersLuck.Game.Services;
 using BeginnersLuck.Game.World;
+using BeginnersLuck.WorldGen;
+using BeginnersLuck.WorldGen.Data;
 using BeginnersLuck.WorldGen.Local;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
@@ -17,16 +19,6 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 
 namespace BeginnersLuck.Game.Scenes;
-
-public sealed class MapDto
-{
-    public int Width { get; set; }
-    public int Height { get; set; }
-    public int TileSize { get; set; }
-    public string Tileset { get; set; } = "";
-    public int[] Solid { get; set; } = Array.Empty<int>();
-    public int[] Tiles { get; set; } = Array.Empty<int>();
-}
 
 public sealed class WorldMapScene : SceneBase
 {
@@ -44,14 +36,23 @@ public sealed class WorldMapScene : SceneBase
     private KeyboardState _prevKs;
     private GamePadState _prevPad;
 
-    // Encounter toast
+    // Encounter toast (kept, but not actively used here yet)
     private bool _toastActive;
     private float _toastT;
-    private float _toastDuration = 0.55f;
-    private string _toastText = "";
+    private readonly float _toastDuration = 0.55f;
     private EncounterDef? _toastEncounter;
     private KeyboardState _toastSeedKs;
     private GamePadState _toastSeedPad;
+
+    // Loaded world DTO
+    private WorldDto? _world;
+
+    // Flattened arrays at WORLD resolution
+    private byte[]? _terrainFlat;
+    private ushort[]? _flagsFlat;
+
+    // Actual WorldGen runtime world (needed for local generation)
+    private BeginnersLuck.WorldGen.WorldMap? _worldMap;
 
     public WorldMapScene(GameServices s)
     {
@@ -63,33 +64,80 @@ public sealed class WorldMapScene : SceneBase
         _white = new Texture2D(graphicsDevice, 1, 1);
         _white.SetData(new[] { Color.White });
 
-        // Load map json (RawContent path is relative to ContentRaw root)
-        var json = _s.Raw.LoadText("Data/map_test.json");
-        var dto = JsonSerializer.Deserialize<MapDto>(json,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        // 1) Load generated world.json from repo-root Worlds folder
+        int seed = _s.World.WorldSeed;
+        string worldJson = WorldPaths.WorldJsonPath(seed);
 
-        if (string.IsNullOrWhiteSpace(dto.Tileset))
-            throw new InvalidOperationException("Map JSON missing 'tileset' (expected e.g. \"Textures/tiles.png\").");
+        if (!File.Exists(worldJson))
+            throw new FileNotFoundException($"world.json not found: {worldJson}");
 
-        _map = new TileMap(dto.Width, dto.Height, dto.TileSize, dto.Tiles);
+        var json = File.ReadAllText(worldJson);
+        _world = JsonSerializer.Deserialize<WorldDto>(json, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        }) ?? throw new InvalidOperationException("Failed to deserialize world.json.");
 
-        foreach (var id in dto.Solid)
-            _map.SetSolid(id, true);
+        _world.Validate();
 
-        var tex = _s.Raw.LoadTexture(dto.Tileset);
-        _tileset = new TileSet(tex, dto.TileSize);
+        int w = _world.Width;
+        int h = _world.Height;
+        int cs = _world.ChunkSize;
+
+        // 2) Flatten terrain + flags from chunks
+        _terrainFlat = new byte[w * h];
+        _flagsFlat = new ushort[w * h];
+
+        foreach (var ch in _world.Chunks)
+        {
+            int baseX = ch.Cx * cs;
+            int baseY = ch.Cy * cs;
+
+            for (int ly = 0; ly < cs; ly++)
+            for (int lx = 0; lx < cs; lx++)
+            {
+                int local = lx + ly * cs;
+                int wx = baseX + lx;
+                int wy = baseY + ly;
+
+                if ((uint)wx >= (uint)w || (uint)wy >= (uint)h)
+                    continue;
+
+                int i = wx + wy * w;
+
+                _terrainFlat[i] = (byte)ch.Terrain[local];
+                _flagsFlat[i] = (ushort)ch.Flags[local]; // <-- IMPORTANT: keep ushort, do NOT cast to byte
+            }
+        }
+
+        // 3) Build render map + collision
+        const int tileSize = 16;
+        _map = new TileMap(w, h, tileSize, new int[w * h]);
+
+        for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+        {
+            int i = x + y * w;
+            var tid = (TileId)_terrainFlat[i];
+
+            _map.Tiles[i] = WorldTilePalette.ToTileIndex(tid);
+
+            if (WorldTilePalette.IsSolid(tid))
+                _map.SetSolidCell(x, y, true);
+        }
+
+        // 4) Renderer
+        var tex = _s.Raw.LoadTexture("Textures/tiles.png");
+        _tileset = new TileSet(tex, tileSize);
         _mapRenderer = new TileMapRenderer(_tileset);
 
-        // Zones derived from tiles (runtime, deterministic)
-        _s.Zones = ZoneMap.GenerateFromTiles(
-            _map.Width,
-            _map.Height,
-            (x, y) => _map.GetTileId(x, y),
-            seed: 12345,
-            zoneSizeCells: 8
-        );
+        // 5) Build a real WorldMap for LocalMapCache / LocalMapGenerator
+        _worldMap = BuildWorldMap(_world);
 
-        // Start camera centered
+        // 6) Start player near center on walkable cell
+        _playerCell = new Point(w / 2, h / 2);
+        _playerCell = FindNearestWalkable(_playerCell, w, h);
+
+        // 7) Camera start
         _cam.Position = _map.CellToWorldCenter(_playerCell);
     }
 
@@ -98,11 +146,14 @@ public sealed class WorldMapScene : SceneBase
         _white?.Dispose();
         _white = null;
 
-        // Note: we DO NOT dispose tileset texture here because RawContent may cache/reuse.
-        // If you want explicit lifetime, we can add a texture cache with ownership rules.
         _tileset = null;
         _mapRenderer = null;
         _map = null;
+
+        _world = null;
+        _terrainFlat = null;
+        _flagsFlat = null;
+        _worldMap = null;
     }
 
     public override void Update(UpdateContext uc)
@@ -120,11 +171,13 @@ public sealed class WorldMapScene : SceneBase
             if (_toastT >= _toastDuration && !_s.Fade.Active)
             {
                 _toastActive = false;
-
-                _s.Fade.Start(0.25f, () =>
+                if (_toastEncounter != null)
                 {
-                    _s.Scenes.Push(new BattleScene(_s, _toastEncounter, _toastSeedKs, _toastSeedPad));
-                });
+                    _s.Fade.Start(0.25f, () =>
+                    {
+                        _s.Scenes.Push(new BattleScene(_s, _toastEncounter, _toastSeedKs, _toastSeedPad));
+                    });
+                }
             }
 
             _prevKs = ks;
@@ -132,7 +185,7 @@ public sealed class WorldMapScene : SceneBase
             return;
         }
 
-        // Pause (Esc/Start/Back)  ✅ unchanged behavior
+        // Pause (Esc/Start/Back)
         if (Pressed(ks, Keys.Escape) || Pressed(pad, Buttons.Start) || Pressed(pad, Buttons.Back))
         {
             _s.Scenes.Push(new PauseScene(_s));
@@ -141,13 +194,10 @@ public sealed class WorldMapScene : SceneBase
             return;
         }
 
-        // Hub/Menu (Tab / Y) ✅ separate from pause
-        // Tab is intentionally NOT Cancel/Pause. This opens the hub directly.
+        // Hub/Menu (Tab / Y)
         if (Pressed(ks, Keys.Tab) || Pressed(pad, Buttons.Y))
         {
-            // Start tab 0 should now be whatever you want first (likely Character)
             _s.Scenes.Push(new MenuHubScene(_s, ks, startTab: 0));
-
             _prevKs = ks;
             _prevPad = pad;
             return;
@@ -169,105 +219,77 @@ public sealed class WorldMapScene : SceneBase
             else if (Pressed(pad, Buttons.DPadRight)) dir = new Point(1, 0);
         }
 
-        bool moved = false;
-
         if (dir != Point.Zero)
         {
             var next = _playerCell + dir;
-
-            // Collision
-            if (!_map.IsSolidCell(next.X, next.Y))
+            if ((uint)next.X < (uint)_map.Width && (uint)next.Y < (uint)_map.Height)
             {
-                _playerCell = next;
-                moved = true;
+                if (!_map.IsSolidCell(next.X, next.Y))
+                    _playerCell = next;
             }
         }
 
-        // If moved, roll for encounter based on zone
-        if (moved && _s.Zones != null)
-        {
-            var zone = _s.Zones.GetInfo(_playerCell.X, _playerCell.Y);
-            var intent = _s.EncounterDirector.OnPlayerMoved(_playerCell, zone, _s.Rng);
-
-            if (intent.HasValue && !_s.Fade.Active)
-            {
-                var i = intent.Value;
-                StartEncounterToast(i.Encounter, $"ENCOUNTER: {i.Encounter.Name.ToUpperInvariant()}!", ks, pad);
-
-                _prevKs = ks;
-                _prevPad = pad;
-                return;
-            }
-        }
-
-        // DEV: jump straight into the known-good local map (seed777 local_262_20)
-        // Use F9 (or RightStick) so it doesn't conflict with normal controls.
+        // DEV: jump into known-good local map (seed777 local_262_20)
         if (Pressed(ks, Keys.F9) || Pressed(pad, Buttons.RightStick))
         {
-            int seed = _s.World.WorldSeed;   // should be 777 in your current setup
+            int seed = _s.World.WorldSeed;
             int wx = 262;
             int wy = 20;
             var purpose = LocalMapPurpose.Town;
 
-            string localBin = WorldPaths.LocalMapBinPath(seed, wx, wy);
+            string localBin = WorldPaths.LocalBin(seed, wx, wy);
 
             if (!File.Exists(localBin))
-            {
                 _s.Toasts.Push($"Missing: {localBin}", 1.4f);
-            }
             else if (!_s.Fade.Active)
-            {
                 _s.Fade.Start(0.25f, () => _s.Scenes.Push(new LocalMapScene(_s, localBin, purpose)));
-            }
 
             _prevKs = ks;
             _prevPad = pad;
             return;
         }
 
-        // Enter Local Map (E / A)
+        // Enter / Generate Local Map (E / A)
         if (Pressed(ks, Keys.E) || Pressed(pad, Buttons.A))
         {
-            int wx = _playerCell.X;
-            int wy = _playerCell.Y;
-
-            // TODO: once your world map is actually generated, derive this from world flags.
-            // For now: wilderness by default.
-            var purpose = LocalMapPurpose.Wilderness;
-
-            int seed = _s.World.WorldSeed;
-            string localBin = WorldPaths.LocalMapBinPath(seed, wx, wy);
-
-            if (!File.Exists(localBin))
+            if (_world == null || _flagsFlat == null || _worldMap == null)
             {
-                _s.Toasts.Push($"No local map found for ({wx},{wy}). Generate it first.", 1.2f);
-                _prevKs = ks;
-                _prevPad = pad;
+                _s.Toasts.Push("World not loaded.", 1.2f);
+                _prevKs = ks; _prevPad = pad;
                 return;
             }
 
+            int wx = _playerCell.X;
+            int wy = _playerCell.Y;
+
+            int idx = wx + wy * _world.Width;
+            var purpose = WorldTilePalette.PurposeFromFlags(_flagsFlat[idx]);
+
+            int seed = _s.World.WorldSeed;
+
+            string localBin = LocalMapCache.EnsureLocalExists(
+                world: _worldMap,
+                worldSeed: seed,
+                wx: wx,
+                wy: wy,
+                localSize: 128,
+                purpose: purpose
+            );
+
             if (!_s.Fade.Active)
-            {
-                _s.Fade.Start(0.25f, () =>
-                {
-                    _s.Scenes.Push(new LocalMapScene(_s, localBin, purpose));
-                });
-            }
+                _s.Fade.Start(0.25f, () => _s.Scenes.Push(new LocalMapScene(_s, localBin, purpose)));
 
             _prevKs = ks;
             _prevPad = pad;
             return;
         }
 
-
-
-        // Camera follow (center on player)
+        // Camera follow
         _cam.Position = _map.CellToWorldCenter(_playerCell);
 
         _prevKs = ks;
         _prevPad = pad;
     }
-
 
     protected override void DrawWorld(RenderContext rc)
     {
@@ -280,7 +302,6 @@ public sealed class WorldMapScene : SceneBase
             blendState: BlendState.AlphaBlend,
             transformMatrix: _cam.GetViewMatrix());
 
-        // view rect centered on camera
         var view = new Rectangle(
             (int)(_cam.Position.X - PixelRenderer.InternalWidth * 0.5f),
             (int)(_cam.Position.Y - PixelRenderer.InternalHeight * 0.5f),
@@ -289,9 +310,9 @@ public sealed class WorldMapScene : SceneBase
 
         _mapRenderer.Draw(sb, _map, view);
 
-        // Player marker (top-left of cell, inset)
+        // Player marker
         var pos = _map.CellToWorldTopLeft(_playerCell);
-        sb.Draw(_white, new Rectangle((int)pos.X + 10, (int)pos.Y + 10, 12, 12), Color.Gold);
+        sb.Draw(_white, new Rectangle((int)pos.X + 2, (int)pos.Y + 2, 12, 12), Color.Gold);
 
         sb.End();
     }
@@ -301,78 +322,97 @@ public sealed class WorldMapScene : SceneBase
         if (_white == null) return;
 
         var sb = rc.SpriteBatch;
+        sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
 
-        sb.Begin(
-            samplerState: SamplerState.PointClamp,
-            blendState: BlendState.AlphaBlend);
-
-        // HUD panel (top-left)
-        var hud = new Rectangle(8, 8, 190, 34);
+        // HUD panel
+        var hud = new Rectangle(8, 8, 260, 52);
         sb.Draw(_white, hud, new Color(10, 10, 18) * 0.75f);
-        sb.Draw(_white, new Rectangle(hud.X, hud.Y, hud.Width, 1), Color.White * 0.18f);
-        sb.Draw(_white, new Rectangle(hud.X, hud.Bottom - 1, hud.Width, 1), Color.White * 0.12f);
 
-        // Text
-        // (BitmapFont is your 8x8; scale 1 keeps it crisp in 480x270)
-        var gold = _s.Player.Gold;
-        var xp = _s.Player.TotalXp;
-
-        _s.UiFont.Draw(sb, $"GOLD: {gold}", new Vector2(hud.X + 8, hud.Y + 8), Color.White * 0.9f, scale: 1);
-        _s.UiFont.Draw(sb, $"XP:   {xp}", new Vector2(hud.X + 8, hud.Y + 18), Color.White * 0.9f, scale: 1);
-
-        // Optional: debug hint (remove anytime)
-        // _s.Font.Draw(sb, "ESC/START: PAUSE", new Vector2(8, 48), Color.White * 0.5f, 1);
+        _s.UiFont.Draw(sb, $"GOLD: {_s.Player.Gold}", new Vector2(hud.X + 8, hud.Y + 8), Color.White * 0.9f, 1);
+        _s.UiFont.Draw(sb, $"XP:   {_s.Player.TotalXp}", new Vector2(hud.X + 8, hud.Y + 18), Color.White * 0.9f, 1);
+        _s.UiFont.Draw(sb, $"WORLD: {_playerCell.X},{_playerCell.Y}", new Vector2(hud.X + 8, hud.Y + 32), Color.White * 0.75f, 1);
 
         sb.End();
     }
 
+    private Point FindNearestWalkable(Point start, int w, int h)
+    {
+        if (_map == null) return start;
 
-    private void StartEncounterToast(EncounterDef enc, string text, KeyboardState ks, GamePadState pad)
+        if (!_map.IsSolidCell(start.X, start.Y))
+            return start;
+
+        for (int r = 1; r < 128; r++)
+        {
+            for (int dy = -r; dy <= r; dy++)
+            for (int dx = -r; dx <= r; dx++)
+            {
+                int x = start.X + dx;
+                int y = start.Y + dy;
+                if ((uint)x >= (uint)w || (uint)y >= (uint)h) continue;
+
+                if (!_map.IsSolidCell(x, y))
+                    return new Point(x, y);
+            }
+        }
+
+        return start;
+    }
+
+    private static BeginnersLuck.WorldGen.WorldMap BuildWorldMap(WorldDto dto)
+{
+    var wm = new BeginnersLuck.WorldGen.WorldMap
+    {
+        Width = dto.Width,
+        Height = dto.Height,
+        ChunkSize = dto.ChunkSize,
+        Seed = dto.Seed,
+        GeneratorVersion = dto.GeneratorVersion
+    };
+
+    int cs = dto.ChunkSize;
+    int n = cs * cs;
+
+    foreach (var ch in dto.Chunks)
+    {
+        // IMPORTANT: match your Chunk ctor signature
+        var c = new BeginnersLuck.WorldGen.Data.Chunk(cs, ch.Cx, ch.Cy);
+
+        // Copy arrays (fast + safe)
+        // Terrain + Flags + Biome are the critical ones for local generation.
+        for (int i = 0; i < n; i++)
+        {
+            c.Terrain[i] = (TileId)ch.Terrain[i];
+            c.Flags[i]   = (TileFlags)ch.Flags[i];
+
+            c.Biome[i]   = (BiomeId)ch.Biome[i];
+
+            // Region/SubRegion are ushort already in Chunk.
+            c.Region[i]    = (ushort)ch.Region[i];
+            c.SubRegion[i] = (ushort)ch.SubRegion[i];
+
+            // If your DTO includes these, copy them too:
+            // c.Elevation[i] = ch.Elevation[i];
+            // c.Moisture[i] = ch.Moisture[i];
+            // c.Temperature[i] = ch.Temperature[i];
+        }
+
+        wm.SetChunk(ch.Cx, ch.Cy, c);
+    }
+
+    return wm;
+}
+
+
+    private void StartEncounterToast(EncounterDef enc, KeyboardState ks, GamePadState pad)
     {
         _toastActive = true;
         _toastT = 0f;
-        _toastText = text;
         _toastEncounter = enc;
-
-        // seed input so BattleScene won't press-through
         _toastSeedKs = ks;
         _toastSeedPad = pad;
     }
 
     private bool Pressed(KeyboardState ks, Keys k) => ks.IsKeyDown(k) && !_prevKs.IsKeyDown(k);
     private bool Pressed(GamePadState pad, Buttons b) => pad.IsButtonDown(b) && !_prevPad.IsButtonDown(b);
-
-    private static void DrawTextCentered8x8(SpriteBatch sb, IFont font, string text, Rectangle r, Color color, int scale)
-    {
-        var size = MeasureText8x8(text, scale);
-        var pos = new Vector2(
-            r.X + (r.Width - size.X) * 0.5f,
-            r.Y + (r.Height - size.Y) * 0.5f);
-
-        font.Draw(sb, text, pos, color, scale);
-    }
-
-    private static Point MeasureText8x8(string text, int scale)
-    {
-        int maxLine = 0;
-        int line = 0;
-        int lines = 1;
-
-        for (int i = 0; i < text.Length; i++)
-        {
-            if (text[i] == '\n')
-            {
-                maxLine = Math.Max(maxLine, line);
-                line = 0;
-                lines++;
-            }
-            else
-            {
-                line++;
-            }
-        }
-
-        maxLine = Math.Max(maxLine, line);
-        return new Point(maxLine * 8 * scale, lines * 8 * scale);
-    }
 }
