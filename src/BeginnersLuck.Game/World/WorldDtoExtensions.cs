@@ -8,7 +8,7 @@ public static class WorldDtoExtensions
     {
         if (w.Width <= 0 || w.Height <= 0) throw new InvalidOperationException("world.json invalid dimensions.");
         if (w.ChunkSize <= 0) throw new InvalidOperationException("world.json missing ChunkSize.");
-        if (w.Chunks == null || w.Chunks.Length == 0) throw new InvalidOperationException("world.json has no Chunks.");
+        if (w.Chunks == null || w.Chunks.Count == 0) throw new InvalidOperationException("world.json has no Chunks.");
     }
 
     public static int[] BuildFullTerrain(this WorldDto w)
