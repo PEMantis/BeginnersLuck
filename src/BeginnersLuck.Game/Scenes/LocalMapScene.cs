@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using BeginnersLuck.Engine.Graphics;
 using BeginnersLuck.Engine.Rendering;
 using BeginnersLuck.Engine.Scenes;
@@ -39,6 +38,7 @@ public sealed class LocalMapScene : SceneBase
     private GamePadState _prevPad;
 
     private readonly CameraZoom.State _zoom = new() { MinZoom = 0.5f, MaxZoom = 4.0f, Step = 0.12f };
+    private Point? _townCenter;
 
     public LocalMapScene(GameServices s, string mapBinPath, LocalMapPurpose purpose, SpawnRequest spawn)
     {
@@ -63,13 +63,11 @@ public sealed class LocalMapScene : SceneBase
         int n = _local.Size;
         var tiles = new int[n * n];
 
-        // Convert terrain -> tileIndex
         for (int i = 0; i < tiles.Length; i++)
             tiles[i] = LocalTilePalette.ToTileIndex(_local.Terrain[i]);
 
         _map = new TileMap(n, n, tileSize, tiles);
 
-        // Authoritative collision: define solidity per-cell from Terrain + Flags
         for (int y = 0; y < n; y++)
         for (int x = 0; x < n; x++)
         {
@@ -85,21 +83,16 @@ public sealed class LocalMapScene : SceneBase
             _map.SetSolidCell(x, y, solid);
         }
 
-        // Compute escapable set: all cells reachable from ANY walkable edge tile
         var edgeReach = ComputeReachableFromEdge(_map);
 
-        // Pick spawn INSIDE the escapable set (prevents trapped pockets)
         _playerCell = ResolveSpawnEscapable(_map, _local, _spawn, edgeReach);
 
-        // Final safety: never spawn on solid
+        _townCenter = _local.TownCenter.HasValue
+            ? new Point(_local.TownCenter.Value.X, _local.TownCenter.Value.Y)
+            : (_purpose == LocalMapPurpose.Town ? ResolveFallbackTownCenter(_local, _map) : (Point?)null);
+
         if (_map.IsSolidCell(_playerCell.X, _playerCell.Y))
             _playerCell = FindNearestWalkableInMask(_map, _playerCell, edgeReach);
-
-        int si = _playerCell.X + _playerCell.Y * n;
-        Console.WriteLine(
-            $"[LocalMapScene] Spawn: {_playerCell.X},{_playerCell.Y} " +
-            $"Terrain={_local.Terrain[si]} Flags={_local.Flags[si]} " +
-            $"Solid={_map.IsSolidCell(_playerCell.X,_playerCell.Y)} TileIndex={_map.GetTileId(_playerCell.X,_playerCell.Y)}");
 
         _cam.Position = _map.CellToWorldCenter(_playerCell);
     }
@@ -119,7 +112,6 @@ public sealed class LocalMapScene : SceneBase
         var ks = Keyboard.GetState();
         var pad = GamePad.GetState(PlayerIndex.One);
 
-        // Manual back (ESC/B) without travel
         if (Pressed(ks, Keys.Escape) || Pressed(pad, Buttons.B))
         {
             _s.Scenes.Pop();
@@ -147,55 +139,56 @@ public sealed class LocalMapScene : SceneBase
         {
             var next = _playerCell + dir;
 
-            // If stepping out of bounds, treat it as an edge-exit attempt.
             if (IsOutOfBounds(next, _map.Width, _map.Height))
             {
                 var exitDir = DirFromStep(dir);
 
-                if (PortalAllowsExit(_local, exitDir))
+                var exit = new LocalExitResult(
+                    FromWorldX: _local.WorldX,
+                    FromWorldY: _local.WorldY,
+                    ExitDir: exitDir,
+                    Purpose: _purpose,
+                    LocalBinPath: _mapBinPath,
+                    LocalExitCell: _playerCell
+                );
+
+                _s.World.Travel.PendingLocalExit = exit;
+
+                if (!_s.Fade.Active)
+                    _s.Fade.Start(0.15f, () => _s.Scenes.Pop());
+                else
+                    _s.Scenes.Pop();
+
+                _prevKs = ks;
+                _prevPad = pad;
+                return;
+            }
+
+            if (!_map.IsSolidCell(next.X, next.Y))
+                _playerCell = next;
+        }
+
+        if (_townCenter.HasValue)
+        {
+            var tc = _townCenter.Value;
+            if (_playerCell.X == tc.X && _playerCell.Y == tc.Y)
+            {
+                if (Pressed(pad, Buttons.A))
                 {
-                    var exit = new LocalExitResult(
-                        FromWorldX: _local.WorldX,
-                        FromWorldY: _local.WorldY,
-                        ExitDir: exitDir,
-                        Purpose: _purpose,
-                        LocalBinPath: _mapBinPath,
-                        LocalExitCell: _playerCell
-                    );
-
-                    _s.World.Travel.PendingLocalExit = exit;
-
-                    // Fade is optional; feel free to pop immediately if you prefer.
-                    if (!_s.Fade.Active)
-                    {
-                        _s.Fade.Start(0.15f, () => _s.Scenes.Pop());
-                    }
-                    else
-                    {
-                        _s.Scenes.Pop();
-                    }
-
+                    _s.Scenes.Push(new TownScene(_s, new Point(_local.WorldX, _local.WorldY)));
                     _prevKs = ks;
                     _prevPad = pad;
                     return;
                 }
-                else
-                {
-                    _s.Toasts.Push("No exit here.", 0.35f);
-                }
-            }
-            else
-            {
-                // Normal in-bounds step
-                if (!_map.IsSolidCell(next.X, next.Y))
-                    _playerCell = next;
             }
         }
 
-        _cam.Position = _map.CellToWorldCenter(_playerCell);
-
+        // Zoom
         CameraZoom.ApplyMouseWheel(_cam, _zoom, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
         CameraZoom.ApplyBumpers(_cam, _zoom, pad, _prevPad, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
+
+        // Follow
+        _cam.Position = _map.CellToWorldCenter(_playerCell);
 
         _prevKs = ks;
         _prevPad = pad;
@@ -212,48 +205,16 @@ public sealed class LocalMapScene : SceneBase
             blendState: BlendState.AlphaBlend,
             transformMatrix: _cam.GetViewMatrix());
 
-        var view = new Rectangle(
-            (int)(_cam.Position.X - PixelRenderer.InternalWidth * 0.5f),
-            (int)(_cam.Position.Y - PixelRenderer.InternalHeight * 0.5f),
-            PixelRenderer.InternalWidth,
-            PixelRenderer.InternalHeight);
-
+        // ✅ Correct: viewWorldPixels must be zoom-aware because transform scales the world.
+        var view = ComputeViewWorldPixels(_cam);
         _mapRenderer.Draw(sb, _map, view);
 
-        // Overlays (roads/rivers) neighbor-aware
-        int n = _local.Size;
-        for (int y = 0; y < n; y++)
-        for (int x = 0; x < n; x++)
+        // Town center marker
+        if (_townCenter.HasValue)
         {
-            int i = x + y * n;
-            var f = _local.Flags[i];
-            if (f == TileFlags.None) continue;
-
-            var tl = _map.CellToWorldTopLeft(new Point(x, y));
-
-            if ((f & TileFlags.Road) != 0)
-            {
-                var mask = NeighborMask(_local, x, y, TileFlags.Road);
-
-                sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 6, 4, 4), Color.SaddleBrown);
-
-                if (mask.HasFlag(NMask.North)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 7, (int)tl.Y + 0, 2, 6), Color.SaddleBrown);
-                if (mask.HasFlag(NMask.South)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 7, (int)tl.Y + 10, 2, 6), Color.SaddleBrown);
-                if (mask.HasFlag(NMask.West)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 0, (int)tl.Y + 7, 6, 2), Color.SaddleBrown);
-                if (mask.HasFlag(NMask.East)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 10, (int)tl.Y + 7, 6, 2), Color.SaddleBrown);
-            }
-
-            if ((f & TileFlags.River) != 0)
-            {
-                var mask = NeighborMask(_local, x, y, TileFlags.River);
-
-                sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 6, 4, 4), Color.CornflowerBlue);
-
-                if (mask.HasFlag(NMask.North)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 0, 4, 6), Color.CornflowerBlue);
-                if (mask.HasFlag(NMask.South)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 10, 4, 6), Color.CornflowerBlue);
-                if (mask.HasFlag(NMask.West)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 0, (int)tl.Y + 6, 6, 4), Color.CornflowerBlue);
-                if (mask.HasFlag(NMask.East)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 10, (int)tl.Y + 6, 6, 4), Color.CornflowerBlue);
-            }
+            var tc = _townCenter.Value;
+            var tl = _map.CellToWorldTopLeft(tc);
+            sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 6, 20, 20), Color.LimeGreen * 0.85f);
         }
 
         // Player marker
@@ -285,8 +246,30 @@ public sealed class LocalMapScene : SceneBase
             Color.White * 0.85f,
             scale: 1);
 
+        _s.UiFont.Draw(sb,
+            _townCenter.HasValue ? $"TownCenter: {_townCenter.Value.X},{_townCenter.Value.Y} (Stand + A)"
+                                 : "TownCenter: (none)",
+            new Vector2(8, 38),
+            Color.White * 0.75f, 1);
+
         sb.End();
     }
+
+    // --- helpers ---
+
+    private static Rectangle ComputeViewWorldPixels(Camera2D cam)
+    {
+        float z = cam.Zoom;
+        float vw = PixelRenderer.InternalWidth / z;
+        float vh = PixelRenderer.InternalHeight / z;
+
+        return new Rectangle(
+            (int)(cam.Position.X - vw * 0.5f),
+            (int)(cam.Position.Y - vh * 0.5f),
+            (int)vw,
+            (int)vh);
+    }
+
 
     private static bool IsOutOfBounds(Point p, int w, int h)
         => p.X < 0 || p.Y < 0 || p.X >= w || p.Y >= h;
@@ -297,52 +280,6 @@ public sealed class LocalMapScene : SceneBase
         if (step.X == -1) return Dir.West;
         if (step.Y == 1) return Dir.South;
         return Dir.North;
-    }
-
-    /// <summary>
-    /// We "respect portals if present", but we don't hard-bind to any specific EdgePortals shape.
-    /// If we can't read it, we default to allowing exit (dev-friendly).
-    /// </summary>
-    private static bool PortalAllowsExit(LocalMapData local, Dir d)
-    {
-        object portals = local.Portals;
-        var t = portals.GetType();
-
-        string name = d switch
-        {
-            Dir.North => "North",
-            Dir.South => "South",
-            Dir.East => "East",
-            Dir.West => "West",
-            _ => "North"
-        };
-
-        // Try property first
-        var prop = t.GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
-        if (prop != null)
-        {
-            var v = prop.GetValue(portals);
-            if (v is bool b) return b;
-            if (v is int i) return i != 0;
-            if (v is byte bb) return bb != 0;
-            if (v is short s) return s != 0;
-            if (v is Enum e) return Convert.ToInt32(e) != 0;
-        }
-
-        // Try field
-        var field = t.GetField(name, BindingFlags.Public | BindingFlags.Instance);
-        if (field != null)
-        {
-            var v = field.GetValue(portals);
-            if (v is bool b) return b;
-            if (v is int i) return i != 0;
-            if (v is byte bb) return bb != 0;
-            if (v is short s) return s != 0;
-            if (v is Enum e) return Convert.ToInt32(e) != 0;
-        }
-
-        // Unknown shape: allow exit (so dev loop always works)
-        return true;
     }
 
     private bool Pressed(KeyboardState ks, Keys k) => ks.IsKeyDown(k) && !_prevKs.IsKeyDown(k);
@@ -366,7 +303,6 @@ public sealed class LocalMapScene : SceneBase
             q.Enqueue(new Point(x, y));
         }
 
-        // Seed queue with all walkable edge cells
         for (int x = 0; x < w; x++)
         {
             EnqueueIfWalkable(x, 0);
@@ -378,7 +314,6 @@ public sealed class LocalMapScene : SceneBase
             EnqueueIfWalkable(w - 1, y);
         }
 
-        // BFS
         while (q.Count > 0)
         {
             var p = q.Dequeue();
@@ -398,14 +333,20 @@ public sealed class LocalMapScene : SceneBase
         bool HasRoad(int x, int y)
             => (local.Flags[x + y * n] & TileFlags.Road) != 0;
 
-        Point EdgeSeed(Dir dir) => dir switch
+        Point EdgeSeed(Dir dir)
         {
-            Dir.West => new Point(1, n / 2),
-            Dir.East => new Point(n - 2, n / 2),
-            Dir.North => new Point(n / 2, 1),
-            Dir.South => new Point(n / 2, n - 2),
-            _ => new Point(n / 2, n / 2),
-        };
+            var p = local.Portals;
+            int clamp(int v) => Math.Clamp(v, 1, n - 2);
+
+            return dir switch
+            {
+                Dir.West => new Point(1, clamp(p.RoadWPos)),
+                Dir.East => new Point(n - 2, clamp(p.RoadEPos)),
+                Dir.North => new Point(clamp(p.RoadNPos), 1),
+                Dir.South => new Point(clamp(p.RoadSPos), n - 2),
+                _ => new Point(n / 2, n / 2),
+            };
+        }
 
         Point start = spawn.Intent switch
         {
@@ -417,7 +358,7 @@ public sealed class LocalMapScene : SceneBase
         {
             if ((uint)x >= (uint)n || (uint)y >= (uint)n) return false;
             if (map.IsSolidCell(x, y)) return false;
-            if (!edgeReach[map.Index(x, y)]) return false; // must be escapable
+            if (!edgeReach[map.Index(x, y)]) return false;
             if (requireRoad && !HasRoad(x, y)) return false;
             return true;
         }
@@ -440,11 +381,10 @@ public sealed class LocalMapScene : SceneBase
                 for (int y = minY; y <= maxY; y++)
                 {
                     if (Ok(minX, y, requireRoad)) return new Point(minX, y);
-                    if (Ok(maxX, y, requireRoad)) return new Point(x: maxX, y: y);
+                    if (Ok(maxX, y, requireRoad)) return new Point(maxX, y);
                 }
             }
 
-            // Fallback scan: any escapable tile
             for (int y = 0; y < n; y++)
             for (int x = 0; x < n; x++)
                 if (Ok(x, y, requireRoad))
@@ -507,28 +447,41 @@ public sealed class LocalMapScene : SceneBase
         return start;
     }
 
-    [Flags]
-    private enum NMask
-    {
-        None = 0,
-        North = 1 << 0,
-        East = 1 << 1,
-        South = 1 << 2,
-        West = 1 << 3
-    }
-
-    private static NMask NeighborMask(LocalMapData local, int x, int y, TileFlags flag)
+    private static Point ResolveFallbackTownCenter(LocalMapData local, TileMap map)
     {
         int n = local.Size;
-        int idx(int xx, int yy) => xx + yy * n;
+        var center = new Point(n / 2, n / 2);
 
-        NMask m = NMask.None;
+        for (int r = 0; r < 64; r++)
+        {
+            for (int dy = -r; dy <= r; dy++)
+            {
+                int dx = r - Math.Abs(dy);
 
-        if (y > 0 && (local.Flags[idx(x, y - 1)] & flag) != 0) m |= NMask.North;
-        if (x < n - 1 && (local.Flags[idx(x + 1, y)] & flag) != 0) m |= NMask.East;
-        if (y < n - 1 && (local.Flags[idx(x, y + 1)] & flag) != 0) m |= NMask.South;
-        if (x > 0 && (local.Flags[idx(x - 1, y)] & flag) != 0) m |= NMask.West;
+                if (Try(center.X + dx, center.Y + dy, out var p)) return p;
+                if (Try(center.X - dx, center.Y + dy, out p)) return p;
+            }
+        }
 
-        return m;
+        for (int y = 1; y < n - 1; y++)
+        for (int x = 1; x < n - 1; x++)
+            if (!map.IsSolidCell(x, y))
+                return new Point(x, y);
+
+        return center;
+
+        bool Try(int x, int y, out Point p)
+        {
+            p = default;
+            if ((uint)x >= (uint)n || (uint)y >= (uint)n) return false;
+            if (map.IsSolidCell(x, y)) return false;
+
+            int i = x + y * n;
+            if ((local.Flags[i] & TileFlags.Road) == 0) return false;
+
+            p = new Point(x, y);
+            return true;
+        }
     }
+
 }

@@ -58,6 +58,9 @@ public sealed class WorldMapScene : SceneBase
     private Dir _lastWorldMoveDir = Dir.North;
     private readonly CameraZoom.State _zoom = new() { MinZoom = 0.5f, MaxZoom = 3.0f, Step = 0.12f };
 
+    // ✅ New: camera toggle + follow feel
+    private bool _followCamera = true;
+
     public WorldMapScene(GameServices s)
     {
         _s = s ?? throw new ArgumentNullException(nameof(s));
@@ -177,6 +180,13 @@ public sealed class WorldMapScene : SceneBase
         var ks = Keyboard.GetState();
         var pad = GamePad.GetState(PlayerIndex.One);
 
+        // ✅ Camera follow toggle (dev)
+        if (Pressed(ks, Keys.F7))
+        {
+            _followCamera = !_followCamera;
+            _s.Toasts.Push(_followCamera ? "Cam: follow" : "Cam: locked", 0.6f);
+        }
+
         if (_toastActive)
         {
             _toastT += (float)uc.GameTime.ElapsedGameTime.TotalSeconds;
@@ -214,6 +224,48 @@ public sealed class WorldMapScene : SceneBase
             return;
         }
 
+        // DEV: force-enter Town local at current world tile (F8 / LeftStick)
+        if (Pressed(ks, Keys.F8) || Pressed(pad, Buttons.LeftStick))
+        {
+            if (_world == null || _worldMap == null)
+            {
+                _s.Toasts.Push("World not loaded.", 1.0f);
+                _prevKs = ks; _prevPad = pad;
+                return;
+            }
+
+            int seed = _s.World.WorldSeed;
+            int wx = _playerCell.X;
+            int wy = _playerCell.Y;
+
+            var purpose = LocalMapPurpose.Town;
+
+            string localBin = WorldPaths.LocalBin(seed, wx, wy);
+            if (File.Exists(localBin))
+                File.Delete(localBin);
+
+            localBin = LocalMapCache.EnsureLocalExists(
+                world: _worldMap!,
+                worldSeed: seed,
+                wx: wx,
+                wy: wy,
+                localSize: 128,
+                purpose: purpose
+            );
+
+            var spawn = new SpawnRequest(SpawnIntent.EnterFromRoad, IncomingDir: Opposite(_lastWorldMoveDir));
+
+            _s.Toasts.Push($"DEV Town @ {wx},{wy}", 0.8f);
+
+            if (!_s.Fade.Active)
+                _s.Fade.Start(0.25f, () => _s.Scenes.Push(new LocalMapScene(_s, localBin, purpose, spawn)));
+
+            _prevKs = ks;
+            _prevPad = pad;
+            return;
+        }
+
+        // Movement (grid)
         Point dir = Point.Zero;
 
         if (Pressed(ks, Keys.W) || Pressed(ks, Keys.Up)) dir = new Point(0, -1);
@@ -244,7 +296,9 @@ public sealed class WorldMapScene : SceneBase
                     else if (dir.Y == -1) _lastWorldMoveDir = Dir.North;
                 }
                 else
+                {
                     _s.Toasts.Push("Blocked.", 0.35f);
+                }
             }
         }
 
@@ -306,10 +360,13 @@ public sealed class WorldMapScene : SceneBase
             return;
         }
 
+        // Zoom
         CameraZoom.ApplyMouseWheel(_cam, _zoom, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
         CameraZoom.ApplyBumpers(_cam, _zoom, pad, _prevPad, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
 
-        _cam.Position = _map.CellToWorldCenter(_playerCell);
+        // ✅ Follow feel (deadzone) or locked
+        if (_followCamera)
+            UpdateCameraDeadzone();
 
         _prevKs = ks;
         _prevPad = pad;
@@ -322,7 +379,6 @@ public sealed class WorldMapScene : SceneBase
 
         _s.World.Travel.PendingLocalExit = null;
 
-        // Base is the world tile the local belonged to
         var from = new Point(pending.FromWorldX, pending.FromWorldY);
 
         var step = pending.ExitDir switch
@@ -336,8 +392,6 @@ public sealed class WorldMapScene : SceneBase
 
         var dest = from + step;
 
-        // Try to move one tile outward in the exit direction.
-        // If it’s invalid or solid, fallback to "from".
         if (_map != null)
         {
             if ((uint)dest.X >= (uint)_map.Width || (uint)dest.Y >= (uint)_map.Height || _map.IsSolidCell(dest.X, dest.Y))
@@ -350,8 +404,41 @@ public sealed class WorldMapScene : SceneBase
         if (_map != null)
             _cam.Position = _map.CellToWorldCenter(_playerCell);
 
-        // Optional toast for clarity during dev
         _s.Toasts.Push($"Exit {pending.ExitDir} -> WORLD {_playerCell.X},{_playerCell.Y}", 0.6f);
+    }
+
+    // ✅ Deadzone camera (world-space). Player moves on screen until they push outside the box.
+    private void UpdateCameraDeadzone()
+    {
+        if (_map == null) return;
+
+        // Start centered if camera hasn't moved yet
+        if (_cam.Position == Vector2.Zero)
+            _cam.Position = _map.CellToWorldCenter(_playerCell);
+
+        float z = _cam.Zoom;
+
+        // For FEEL only. We are not changing TileMapRenderer view semantics.
+        float vw = PixelRenderer.InternalWidth / z;
+        float vh = PixelRenderer.InternalHeight / z;
+
+        float mx = vw * 0.25f;
+        float my = vh * 0.25f;
+
+        var player = _map.CellToWorldCenter(_playerCell);
+        var cam = _cam.Position;
+
+        float left = cam.X - vw * 0.5f + mx;
+        float right = cam.X + vw * 0.5f - mx;
+        float top = cam.Y - vh * 0.5f + my;
+        float bottom = cam.Y + vh * 0.5f - my;
+
+        if (player.X < left) cam.X -= (left - player.X);
+        if (player.X > right) cam.X += (player.X - right);
+        if (player.Y < top) cam.Y -= (top - player.Y);
+        if (player.Y > bottom) cam.Y += (player.Y - bottom);
+
+        _cam.Position = cam;
     }
 
     protected override void DrawWorld(RenderContext rc)
@@ -365,6 +452,7 @@ public sealed class WorldMapScene : SceneBase
             blendState: BlendState.AlphaBlend,
             transformMatrix: _cam.GetViewMatrix());
 
+        // NOTE: keeping your current semantics unchanged
         var view = new Rectangle(
             (int)(_cam.Position.X - PixelRenderer.InternalWidth * 0.5f),
             (int)(_cam.Position.Y - PixelRenderer.InternalHeight * 0.5f),
@@ -386,21 +474,22 @@ public sealed class WorldMapScene : SceneBase
         var sb = rc.SpriteBatch;
         sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
 
-        var hud = new Rectangle(8, 8, 260, 52);
+        var hud = new Rectangle(8, 8, 260, 62);
         sb.Draw(_white, hud, new Color(10, 10, 18) * 0.75f);
 
         _s.UiFont.Draw(sb, $"GOLD: {_s.Player.Gold}", new Vector2(hud.X + 8, hud.Y + 8), Color.White * 0.9f, 1);
         _s.UiFont.Draw(sb, $"XP:   {_s.Player.TotalXp}", new Vector2(hud.X + 8, hud.Y + 18), Color.White * 0.9f, 1);
 
+        _s.UiFont.Draw(sb, $"F7: cam {(_followCamera ? "follow" : "locked")}", new Vector2(hud.X + 8, hud.Y + 28), Color.White * 0.75f, 1);
+
         if (_world != null && _terrainFlat != null && _flagsFlat != null && _map != null)
         {
             int idx = _playerCell.X + _playerCell.Y * _world.Width;
             var tid = (TileId)_terrainFlat[idx];
-            var flags = (TileFlags)_flagsFlat[idx];
 
             _s.UiFont.Draw(sb,
-                $"WORLD: {_playerCell.X},{_playerCell.Y}  {tid}  {_flagsFlat[idx]}  solid={_map.IsSolidCell(_playerCell.X, _playerCell.Y)}  tileIndex={idx}",
-                new Vector2(hud.X + 8, hud.Y + 32),
+                $"WORLD: {_playerCell.X},{_playerCell.Y}  {tid}  {_flagsFlat[idx]}  solid={_map.IsSolidCell(_playerCell.X, _playerCell.Y)}",
+                new Vector2(hud.X + 8, hud.Y + 40),
                 Color.White * 0.75f, 1);
         }
 
@@ -428,10 +517,10 @@ public sealed class WorldMapScene : SceneBase
             for (int i = 0; i < n; i++)
             {
                 c.Terrain[i] = (TileId)ch.Terrain[i];
-                c.Flags[i]   = (TileFlags)ch.Flags[i];
-                c.Biome[i]   = (BiomeId)ch.Biome[i];
+                c.Flags[i] = (TileFlags)ch.Flags[i];
+                c.Biome[i] = (BiomeId)ch.Biome[i];
 
-                c.Region[i]    = (ushort)ch.Region[i];
+                c.Region[i] = (ushort)ch.Region[i];
                 c.SubRegion[i] = (ushort)ch.SubRegion[i];
             }
 
