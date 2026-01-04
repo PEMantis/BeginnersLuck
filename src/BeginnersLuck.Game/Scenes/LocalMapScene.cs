@@ -168,20 +168,28 @@ public sealed class LocalMapScene : SceneBase
                 _playerCell = next;
         }
 
+        // Town Center interaction: stand on TownCenter and press A / Enter / Space / E
         if (_townCenter.HasValue)
         {
             var tc = _townCenter.Value;
-            if (_playerCell.X == tc.X && _playerCell.Y == tc.Y)
+
+            bool onTownCenter = _playerCell.X == tc.X && _playerCell.Y == tc.Y;
+
+            bool interact =
+                Pressed(pad, Buttons.A) ||
+                Pressed(ks, Keys.Enter) ||
+                Pressed(ks, Keys.Space) ||
+                Pressed(ks, Keys.E);
+
+            if (onTownCenter && interact)
             {
-                if (Pressed(pad, Buttons.A))
-                {
-                    _s.Scenes.Push(new TownScene(_s, new Point(_local.WorldX, _local.WorldY)));
-                    _prevKs = ks;
-                    _prevPad = pad;
-                    return;
-                }
+                _s.Scenes.Push(new TownScene(_s, new Point(_local.WorldX, _local.WorldY)));
+                _prevKs = ks;
+                _prevPad = pad;
+                return;
             }
         }
+
 
         // Zoom
         CameraZoom.ApplyMouseWheel(_cam, _zoom, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);

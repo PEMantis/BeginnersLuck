@@ -120,6 +120,11 @@ public sealed class PlayerState
         return (need <= 0) ? 0f : Math.Clamp(XpIntoLevel / (float)need, 0f, 1f);
     }
 
+    public void HealToFull()
+    {
+        Hp = MaxHp;
+    }
+
     // ---------------------------
     // Internals
     // ---------------------------
@@ -133,4 +138,5 @@ public sealed class PlayerState
         MaxHp += 5;
         Hp = MaxHp;
     }
+    
 }
