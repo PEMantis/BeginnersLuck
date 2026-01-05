@@ -80,8 +80,7 @@ public sealed class LocalMapScene : SceneBase
                     WorldTilePalette.IsSolid(tid) ||
                     (flags & TileFlags.Coast) != 0 ||
                     (flags & TileFlags.Cliff) != 0 ||
-                    (flags & TileFlags.River) != 0 ||        // only if your rivers are meant to block
-                    (flags & TileFlags.Ruins) != 0;          // NEW: pillars block
+                    (flags & TileFlags.River) != 0;          // NEW: pillars block
 
 
                 _map.SetSolidCell(x, y, solid);

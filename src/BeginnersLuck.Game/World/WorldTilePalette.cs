@@ -37,7 +37,8 @@ public static class WorldTilePalette
 
     /// <summary>
     /// Base terrain solidity on WORLD MAP.
-    /// Flags (Cliff, Coast, Ruins POI) can add more blocking.
+    /// Flags (Cliff, Coast) can add more blocking.
+    /// IMPORTANT: Keep POIs (Town/Ruins/Road) walkable so player can stand on them & interact.
     /// </summary>
     public static bool IsSolid(TileId id) => id switch
     {
@@ -46,9 +47,11 @@ public static class WorldTilePalette
         TileId.ShallowWater => true,
 
         TileId.Mountain     => true,
-        TileId.Rock         => true,
 
-        // Everything else is passable by default
+        // If you want ROCK to be decorative but passable on the world map, keep it false.
+        // If you want it to block, set to true.
+        // TileId.Rock => true,
+
         _ => false
     };
 

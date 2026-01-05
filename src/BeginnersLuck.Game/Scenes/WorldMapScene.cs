@@ -154,8 +154,7 @@ public sealed class WorldMapScene : SceneBase
           WorldTilePalette.IsSolid(tid) ||
           (flags & TileFlags.Coast) != 0 ||
           (flags & TileFlags.Cliff) != 0 ||
-          (flags & TileFlags.River) != 0 ||        // only if your rivers are meant to block
-          (flags & TileFlags.Ruins) != 0;          // NEW: pillars block
+          (flags & TileFlags.River) != 0;          // NEW: pillars block
 
 
                 _map.SetSolidCell(x, y, solid);
@@ -323,32 +322,51 @@ public sealed class WorldMapScene : SceneBase
             }
         }
 
+        // DEV: spawn a Ruins POI near the player (F6 / LeftShoulder)
+        if (Pressed(ks, Keys.F6) || Pressed(pad, Buttons.LeftShoulder))
+        {
+            if (!DevSpawnRuinsNearPlayer(maxRadius: 14))
+                _s.Toasts.Push("DEV: Couldn't place ruins near player.", 1.0f);
+
+            _prevKs = ks;
+            _prevPad = pad;
+            return;
+        }
+
+        // DEV: stamp ROAD forward from player (F7 / LeftTrigger) (optional if you added it)
+        if (Pressed(ks, Keys.F7) || Pressed(pad, Buttons.LeftTrigger))
+        {
+            StampRoadFromPlayer(length: 12);
+
+            _prevKs = ks;
+            _prevPad = pad;
+            return;
+        }
+
         // Enter / Interact (E / A)
         if (Pressed(ks, Keys.E) || Pressed(pad, Buttons.A))
         {
-            if (_world == null || _flagsFlat == null || _worldMap == null)
+            if (_world == null || _flagsFlat == null || _worldMap == null || _map == null)
             {
                 _s.Toasts.Push("World not loaded.", 1.2f);
                 _prevKs = ks; _prevPad = pad;
                 return;
             }
 
-            // If standing on a POI tile, override purpose based on POI
-            if (TryGetPoiAt(_playerCell, out var poi))
-            {
-                TryEnterPoi(poi, ks, pad);
-
-                _prevKs = ks;
-                _prevPad = pad;
-                return;
-            }
-
-            // Otherwise, use normal purpose from flags
             int wx = _playerCell.X;
             int wy = _playerCell.Y;
 
             int idx = wx + wy * _world.Width;
+            var flags = (TileFlags)_flagsFlat[idx];
+
             var purpose = WorldTilePalette.PurposeFromFlags(_flagsFlat[idx]);
+
+            if ((flags & TileFlags.Ruins) != 0)
+                _s.Toasts.Push("Entering Ruins...", 0.6f);
+            else if ((flags & TileFlags.Town) != 0)
+                _s.Toasts.Push("Entering Town...", 0.6f);
+            else if ((flags & TileFlags.Road) != 0)
+                _s.Toasts.Push("Following Road...", 0.6f);
 
             int seed = _s.World.WorldSeed;
 
@@ -370,6 +388,8 @@ public sealed class WorldMapScene : SceneBase
             _prevPad = pad;
             return;
         }
+
+
 
         CameraZoom.ApplyMouseWheel(_cam, _zoom, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
         CameraZoom.ApplyBumpers(_cam, _zoom, pad, _prevPad, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
@@ -721,80 +741,41 @@ public sealed class WorldMapScene : SceneBase
         }
     }
 
-    private void DrawWorldPois(SpriteBatch sb, Rectangle viewWorldRect)
+    private void DrawWorldPois(SpriteBatch sb, Rectangle view)
     {
-        if (_map == null || _world == null) return;
+        if (_world == null || _flagsFlat == null || _map == null || _white == null)
+            return;
 
-        const int tileSize = 32;
+        int w = _world.Width;
+        int h = _world.Height;
 
-        int minTx = Math.Max(0, viewWorldRect.Left / tileSize);
-        int minTy = Math.Max(0, viewWorldRect.Top / tileSize);
-        int maxTx = Math.Min(_map.Width - 1, viewWorldRect.Right / tileSize + 1);
-        int maxTy = Math.Min(_map.Height - 1, viewWorldRect.Bottom / tileSize + 1);
+        // Convert view rectangle (world pixels) to cell bounds
+        int minX = Math.Max(0, view.Left / _map.TileSize);
+        int minY = Math.Max(0, view.Top / _map.TileSize);
+        int maxX = Math.Min(w - 1, (view.Right / _map.TileSize) + 1);
+        int maxY = Math.Min(h - 1, (view.Bottom / _map.TileSize) + 1);
 
-        int minCx = minTx / PoiChunkSizeTiles;
-        int minCy = minTy / PoiChunkSizeTiles;
-        int maxCx = maxTx / PoiChunkSizeTiles;
-        int maxCy = maxTy / PoiChunkSizeTiles;
-
-        for (int cy = minCy; cy <= maxCy; cy++)
-        for (int cx = minCx; cx <= maxCx; cx++)
-        {
-            var key = new Point(cx, cy);
-
-            if (!_poiChunks.TryGetValue(key, out var pois))
+        for (int y = minY; y <= maxY; y++)
+            for (int x = minX; x <= maxX; x++)
             {
-                pois = GeneratePoiChunk(cx, cy);
-                _poiChunks[key] = pois;
+                int i = x + y * w;
+                var flags = (TileFlags)_flagsFlat[i];
 
-                for (int i = 0; i < pois.Count; i++)
-                    _poiByTile[pois[i].Tile] = pois[i];
-            }
-
-            for (int i = 0; i < pois.Count; i++)
-            {
-                var poi = pois[i];
-                var t = poi.Tile;
-
-                if (t.X < minTx || t.X > maxTx || t.Y < minTy || t.Y > maxTy)
+                if ((flags & TileFlags.Ruins) == 0)
                     continue;
 
-                var tl = _map.CellToWorldTopLeft(t);
+                // Draw a visible marker for now (until you swap to ruin_pillar sprite)
+                var topLeft = _map.CellToWorldTopLeft(new Point(x, y));
 
-                // Prefer a dedicated sprite if you register one:
-                // poi.town / poi.ruin / poi.pass
-                string spriteId = poi.Kind switch
-                {
-                    PoiKind.Town => "poi.town",
-                    PoiKind.Ruin => "poi.ruin",
-                    PoiKind.MountainPass => "poi.pass",
-                    _ => ""
-                };
+                // A small "ruins" stamp (purple-ish) that you can't miss
+                var r = new Rectangle((int)topLeft.X + 10, (int)topLeft.Y + 10, 12, 12);
+                sb.Draw(_white, r, Color.MediumPurple);
 
-                if (!string.IsNullOrEmpty(spriteId) && _s.Sprites.TryGet(spriteId, out var tex, out var origin))
-                {
-                    var pos = new Vector2(tl.X + 16, tl.Y + 32);
-                    sb.Draw(tex, pos, null, Color.White, 0f, origin, 1f, SpriteEffects.None, 0f);
-                }
-                else
-                {
-                    // Fallback marker: a little “signpost” pill over the tile
-                    var r = new Rectangle((int)tl.X + 10, (int)tl.Y + 6, 12, 6);
-
-                    var c = poi.Kind switch
-                    {
-                        PoiKind.Town => Color.Cyan * 0.95f,
-                        PoiKind.Ruin => Color.MediumPurple * 0.95f,
-                        PoiKind.MountainPass => Color.Orange * 0.95f,
-                        _ => Color.White * 0.85f
-                    };
-
-                    sb.Draw(_white!, r, c);
-                    sb.Draw(_white!, new Rectangle(r.X, r.Y, r.Width, 1), Color.White * 0.45f);
-                }
+                // Optional: tiny bright pixel highlight
+                sb.Draw(_white, new Rectangle(r.X + 3, r.Y + 3, 2, 2), Color.White * 0.85f);
             }
-        }
     }
+
 
     // ---------------- Generation: Props ----------------
 
@@ -1043,6 +1024,229 @@ public sealed class WorldMapScene : SceneBase
         Dir.West => Dir.East,
         _ => Dir.North
     };
+    private bool DevSpawnRuinsNearPlayer(int maxRadius = 12)
+    {
+        if (_world == null || _map == null || _flagsFlat == null || _terrainFlat == null)
+            return false;
+
+        int w = _world.Width;
+        int h = _world.Height;
+
+        // Find a nearby land cell that isn't blocked by current "solid" rules.
+        if (!TryFindNearbyPlaceableCell(_playerCell, maxRadius, out var p))
+            return false;
+
+        int i = p.X + p.Y * w;
+
+        // Stamp the Ruins flag
+        var flags = (TileFlags)_flagsFlat[i];
+        flags |= TileFlags.Ruins;
+
+        // Optional: clear cliff/coast if you treat them as solid and you want this to be enterable
+        flags &= ~TileFlags.Cliff;
+        flags &= ~TileFlags.Coast;
+
+        _flagsFlat[i] = (ushort)flags;
+
+        // Recompute world solidity for this cell (and optionally neighbors)
+        RefreshSolidAround(p, radius: 1);
+
+        _s.Toasts.Push($"DEV: RUINS @ {p.X},{p.Y}", 0.9f);
+        return true;
+    }
+
+    private bool TryFindNearbyPlaceableCell(Point origin, int maxRadius, out Point found)
+    {
+        found = origin;
+
+        for (int r = 1; r <= maxRadius; r++)
+        {
+            // Scan perimeter of a square ring around origin (cheap + deterministic)
+            for (int dx = -r; dx <= r; dx++)
+            {
+                if (TryCandidate(origin.X + dx, origin.Y - r, out found)) return true; // top
+                if (TryCandidate(origin.X + dx, origin.Y + r, out found)) return true; // bottom
+            }
+
+            for (int dy = -r + 1; dy <= r - 1; dy++)
+            {
+                if (TryCandidate(origin.X - r, origin.Y + dy, out found)) return true; // left
+                if (TryCandidate(origin.X + r, origin.Y + dy, out found)) return true; // right
+            }
+        }
+
+        return false;
+
+        bool TryCandidate(int x, int y, out Point p)
+        {
+            p = default;
+            if (_world == null || _map == null || _terrainFlat == null) return false;
+
+            if ((uint)x >= (uint)_world.Width || (uint)y >= (uint)_world.Height)
+                return false;
+
+            // Must be land
+            int idx = x + y * _world.Width;
+            var tid = (TileId)_terrainFlat[idx];
+            if (tid is TileId.DeepWater or TileId.Ocean or TileId.ShallowWater)
+                return false;
+
+            // Must be walkable now (so you can interact)
+            if (_map.IsSolidCell(x, y))
+                return false;
+
+            p = new Point(x, y);
+            return true;
+        }
+    }
+
+    private void RefreshSolidAround(Point center, int radius)
+    {
+        if (_world == null || _map == null || _terrainFlat == null || _flagsFlat == null)
+            return;
+
+        int w = _world.Width;
+        int h = _world.Height;
+
+        for (int y = center.Y - radius; y <= center.Y + radius; y++)
+            for (int x = center.X - radius; x <= center.X + radius; x++)
+            {
+                if ((uint)x >= (uint)w || (uint)y >= (uint)h)
+                    continue;
+
+                int i = x + y * w;
+                var tid = (TileId)_terrainFlat[i];
+                var flags = (TileFlags)_flagsFlat[i];
+
+
+                bool solid =
+          WorldTilePalette.IsSolid(tid) ||
+          (flags & TileFlags.Coast) != 0 ||
+          (flags & TileFlags.Cliff) != 0 ||
+          (flags & TileFlags.River) != 0;          // NEW: pillars block
+                _map.SetSolidCell(x, y, solid);
+            }
+    }
+    private void StampRoadFromPlayer(int length = 10)
+    {
+        if (_world == null || _flagsFlat == null || _map == null)
+            return;
+
+        int w = _world.Width;
+        int h = _world.Height;
+
+        // Use last movement direction so it's intuitive
+        Point step = _lastWorldMoveDir switch
+        {
+            Dir.North => new Point(0, -1),
+            Dir.South => new Point(0, 1),
+            Dir.East => new Point(1, 0),
+            Dir.West => new Point(-1, 0),
+            _ => new Point(1, 0)
+        };
+
+        int x = _playerCell.X;
+        int y = _playerCell.Y;
+
+        int stamped = 0;
+
+        for (int i = 0; i < length; i++)
+        {
+            if ((uint)x >= (uint)w || (uint)y >= (uint)h)
+                break;
+
+            // Only stamp on walkable cells, but keep marching anyway
+            if (!_map.IsSolidCell(x, y))
+            {
+                int idx = x + y * w;
+
+                _flagsFlat[idx] = (ushort)((TileFlags)_flagsFlat[idx] | TileFlags.Road);
+                WriteFlagBackToDto(x, y, TileFlags.Road, set: true);
+
+                stamped++;
+            }
+
+            x += step.X;
+            y += step.Y;
+        }
+
+        _s.Toasts.Push($"DEV: stamped ROAD len={stamped}", 0.9f);
+    }
+
+    private void StampRuinsNearPlayer(int radius = 2, int maxPlacements = 8)
+    {
+        if (_world == null || _flagsFlat == null || _map == null)
+            return;
+
+        int w = _world.Width;
+        int h = _world.Height;
+
+        // Try a handful of nearby cells so we don't stamp onto water/solid
+        int placed = 0;
+
+        for (int tries = 0; tries < 40 && placed < maxPlacements; tries++)
+        {
+            int dx = _s.Rng.Next(-radius, radius + 1);
+            int dy = _s.Rng.Next(-radius, radius + 1);
+
+            int x = _playerCell.X + dx;
+            int y = _playerCell.Y + dy;
+
+            if ((uint)x >= (uint)w || (uint)y >= (uint)h)
+                continue;
+
+            // Must be walkable ground on world map
+            if (_map.IsSolidCell(x, y))
+                continue;
+
+            int idx = x + y * w;
+
+            // Stamp ruins flag
+            _flagsFlat[idx] = (ushort)((TileFlags)_flagsFlat[idx] | TileFlags.Ruins);
+            WriteFlagBackToDto(x, y, TileFlags.Ruins, set: true);
+
+            placed++;
+        }
+
+        _s.Toasts.Push(placed > 0
+            ? $"DEV: stamped RUINS x{placed}"
+            : "DEV: could not place ruins (all blocked)",
+            0.9f);
+    }
+
+       /// <summary>
+    /// Keeps the loaded _world DTO in sync with _flagsFlat for the specific cell.
+    /// This matters if you later rebuild _flagsFlat from _world.Chunks again.
+    /// Safe no-op if _world is null.
+    /// </summary>
+    private void WriteFlagBackToDto(int wx, int wy, TileFlags flag, bool set)
+    {
+        if (_world == null) return;
+
+        int cs = _world.ChunkSize;
+        int cx = wx / cs;
+        int cy = wy / cs;
+        int lx = wx - cx * cs;
+        int ly = wy - cy * cs;
+        int local = lx + ly * cs;
+
+        // Find the chunk dto
+        // (You can optimize this later by caching a dictionary, but this is fine for dev stamps.)
+        for (int i = 0; i < _world.Chunks.Count; i++)
+        {
+            var ch = _world.Chunks[i];
+            if (ch.Cx != cx || ch.Cy != cy)
+                continue;
+
+            ushort f = ch.Flags[local];
+            var tf = (TileFlags)f;
+
+            tf = set ? (tf | flag) : (tf & ~flag);
+
+            ch.Flags[local] = (ushort)tf;
+            return;
+        }
+    }
 
     private bool Pressed(KeyboardState ks, Keys k) => ks.IsKeyDown(k) && !_prevKs.IsKeyDown(k);
     private bool Pressed(GamePadState pad, Buttons b) => pad.IsButtonDown(b) && !_prevPad.IsButtonDown(b);
