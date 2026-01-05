@@ -5,6 +5,7 @@ using BeginnersLuck.Engine.Rendering;
 using BeginnersLuck.Engine.Scenes;
 using BeginnersLuck.Engine.UI;
 using BeginnersLuck.Engine.Update;
+using BeginnersLuck.Game.Battles;
 using BeginnersLuck.Game.Encounters;
 using BeginnersLuck.Game.Services;
 using BeginnersLuck.Game.UI;
@@ -17,7 +18,6 @@ namespace BeginnersLuck.Game.Scenes;
 
 public sealed class BattleScene : SceneBase
 {
-
     private enum Phase
     {
         Intro,
@@ -30,6 +30,7 @@ public sealed class BattleScene : SceneBase
         Exit
     }
 
+    private enum ExitReason { None, Fled, Victory, Defeat }
 
     private sealed class Enemy
     {
@@ -73,15 +74,12 @@ public sealed class BattleScene : SceneBase
     private GamePadState _prevPad;
     private bool _eatFirstUpdate = true;
 
-    // Rewards
-    private bool _rewardsRolled;
-    private bool _rewardsApplied;
-    private int _rewardXp;
-    private int _rewardGold;
-    private readonly List<(string ItemId, int Qty)> _rewardLoot = new();
+    // Battle result + UI state
+    private BattleResult? _result;
+    private ExitReason _exitReason = ExitReason.None;
 
-    // Victory entry guard
-    private bool _victoryEntered;
+    private int _lootScroll;
+    private float _payoutT;
 
     // --------- Dynamic layout (computed from InternalWidth/Height) ----------
     private Rectangle _screen;
@@ -91,16 +89,6 @@ public sealed class BattleScene : SceneBase
     private Rectangle _panelInfo;
     private Rectangle _btnAttack;
     private Rectangle _btnRun;
-
-    private enum ExitReason { None, Fled, Victory, Defeat }
-
-    private ExitReason _exitReason = ExitReason.None;
-
-    // Victory summary UI state
-    private int _lootScroll;              // index offset for loot list
-    private float _payoutT;               // anim timer for “counting up” feel (optional)
-    private PlayerXpReport? _xpReport;    // level-up info captured when applying XP
-    private bool _levelUpPending;
 
     public BattleScene(GameServices s, EncounterDef encounter, KeyboardState seedKs, GamePadState seedPad)
     {
@@ -127,18 +115,13 @@ public sealed class BattleScene : SceneBase
         _phaseT = 0f;
         _focus = 0;
 
-        _rewardsRolled = false;
-        _rewardsApplied = false;
-        _rewardXp = 0;
-        _rewardGold = 0;
-        _rewardLoot.Clear();
-
-        _victoryEntered = false;
-        _eatFirstUpdate = true;
+        _result = null;
         _exitReason = ExitReason.None;
+
         _lootScroll = 0;
         _payoutT = 0f;
-        _xpReport = null;
+
+        _eatFirstUpdate = true;
 
         ComputeLayout();
     }
@@ -171,9 +154,11 @@ public sealed class BattleScene : SceneBase
         switch (_phase)
         {
             case Phase.Intro:
+            {
                 if (_phaseT >= 0.55f || PressedConfirm(ks, pad))
                     GoTo(Phase.PlayerSelect);
                 break;
+            }
 
             case Phase.PlayerSelect:
             {
@@ -190,6 +175,10 @@ public sealed class BattleScene : SceneBase
                     {
                         _message = "YOU FLED!";
                         _messageT = 0.8f;
+
+                        EnsureBattleResultBuilt(BattleOutcome.Fled);
+                        _exitReason = ExitReason.Fled;
+
                         GoTo(Phase.Exit);
                     }
                 }
@@ -198,48 +187,39 @@ public sealed class BattleScene : SceneBase
             }
 
             case Phase.PlayerResolve:
+            {
+                if (_phaseT < 0.05f) break;
+
+                var target = FirstLivingEnemy();
+                if (target == null)
                 {
-                    if (_phaseT < 0.05f) break;
-
-                    var target = FirstLivingEnemy();
-                    if (target == null)
-                    {
-                        if (_levelUpPending)
-                            GoTo(Phase.LevelUp);
-                        else
-                            GoTo(Phase.VictorySummary); break;
-                    }
-
-                    int dmg = _s.Rng.Next(3, 7); // 3-6
-                target.Hp = Math.Max(0, target.Hp - dmg);
-
-                    _message = $"YOU HIT {target.Name.ToUpperInvariant()} FOR {dmg}!";
-                    _messageT = 0.9f;
-
-                    if (AllEnemiesDown())
-                    {
-                        if (_levelUpPending)
-                            GoTo(Phase.LevelUp);
-                        else
-                            GoTo(Phase.VictorySummary);
-                    }
-                    else GoTo(Phase.EnemyResolve);
-
+                    EnterVictoryFlow();
                     break;
                 }
 
+                int dmg = _s.Rng.Next(3, 7); // 3-6
+                target.Hp = Math.Max(0, target.Hp - dmg);
+
+                _message = $"YOU HIT {target.Name.ToUpperInvariant()} FOR {dmg}!";
+                _messageT = 0.9f;
+
+                if (AllEnemiesDown())
+                    EnterVictoryFlow();
+                else
+                    GoTo(Phase.EnemyResolve);
+
+                break;
+            }
+
             case Phase.EnemyResolve:
             {
-                    if (_phaseT < 0.20f) break;
+                if (_phaseT < 0.20f) break;
 
-                    var attacker = FirstLivingEnemy();
-                    if (attacker == null)
-                    {
-                        if (_levelUpPending)
-                            GoTo(Phase.LevelUp);
-                        else
-                            GoTo(Phase.VictorySummary);
-                        break;
+                var attacker = FirstLivingEnemy();
+                if (attacker == null)
+                {
+                    EnterVictoryFlow();
+                    break;
                 }
 
                 int dmg = _s.Rng.Next(2, 6); // 2-5
@@ -248,33 +228,43 @@ public sealed class BattleScene : SceneBase
                 _message = $"{attacker.Name.ToUpperInvariant()} HITS YOU FOR {dmg}!";
                 _messageT = 0.9f;
 
-                if (_playerHp <= 0) GoTo(Phase.Defeat);
-                else GoTo(Phase.PlayerSelect);
+                if (_playerHp <= 0)
+                {
+                    EnsureBattleResultBuilt(BattleOutcome.Defeat);
+                    _exitReason = ExitReason.Defeat;
+                    GoTo(Phase.Defeat);
+                }
+                else
+                {
+                    GoTo(Phase.PlayerSelect);
+                }
 
                 break;
-                }
+            }
+
+            case Phase.LevelUp:
+            {
+                if (PressedConfirm(ks, pad))
+                    GoTo(Phase.VictorySummary);
+                break;
+            }
 
             case Phase.VictorySummary:
-                {
-                    // One-time roll + apply
-                    RollRewardsIfNeeded();
-                    ApplyRewardsIfNeeded();
+            {
+                // purely visual
+                _payoutT += dt;
 
-                    _exitReason = ExitReason.Victory;
+                var loot = _result?.Loot ?? Array.Empty<LootLine>();
 
-                    // Optional: payout “count-up” timer, purely visual
-                    _payoutT += dt;
+                if (PressedUp(ks, pad)) _lootScroll = Math.Max(0, _lootScroll - 1);
+                if (PressedDown(ks, pad)) _lootScroll = Math.Min(Math.Max(0, loot.Count - 1), _lootScroll + 1);
 
-                    // Basic scrolling for loot list (works even if you later add a scrollbar)
-                    if (PressedUp(ks, pad)) _lootScroll = Math.Max(0, _lootScroll - 1);
-                    if (PressedDown(ks, pad)) _lootScroll = Math.Min(Math.Max(0, _rewardLoot.Count - 1), _lootScroll + 1);
+                if (PressedConfirm(ks, pad))
+                    GoTo(Phase.Exit);
 
-                    // Confirm to leave
-                    if (PressedConfirm(ks, pad))
-                        GoTo(Phase.Exit);
+                break;
+            }
 
-                    break;
-                }
             case Phase.Defeat:
             {
                 if (_messageT <= 0f)
@@ -286,42 +276,48 @@ public sealed class BattleScene : SceneBase
                 if (PressedConfirm(ks, pad))
                     GoTo(Phase.Exit);
 
-                    break;
-                }
+                break;
+            }
 
             case Phase.Exit:
+            {
+                // Give a tiny grace period so accidental double-press doesn’t insta-pop
+                if (_phaseT >= 0.20f && PressedConfirm(ks, pad))
                 {
-                    // Give a tiny grace period so accidental double-press doesn’t insta-pop
-                    if (_phaseT >= 0.20f && PressedConfirm(ks, pad))
-                    {
-                        _s.Scenes.Pop();
-                        return;
-                    }
-
-                    // Auto-exit after a moment for non-summary reasons (flee/defeat),
-                    // but for victory we generally want the player to confirm.
-                    if (_phaseT >= 0.75f && _exitReason != ExitReason.Victory)
-                    {
-                        _s.Scenes.Pop();
-                        return;
-                    }
-
-                    break;
-                }
-            case Phase.LevelUp:
-                {
-                    if (PressedConfirm(ks, pad))
-                    {
-                        _levelUpPending = false;
-                        GoTo(Phase.VictorySummary);
-                    }
-                    break;
+                    _s.Scenes.Pop();
+                    return;
                 }
 
+                // Auto-exit after a moment for non-victory reasons (flee/defeat)
+                if (_phaseT >= 0.75f && _exitReason != ExitReason.Victory)
+                {
+                    _s.Scenes.Pop();
+                    return;
+                }
+
+                break;
+            }
         }
 
         _prevKs = ks;
         _prevPad = pad;
+    }
+
+    private void EnterVictoryFlow()
+    {
+        EnsureBattleResultBuilt(BattleOutcome.Victory);
+        BattleResultApplier.Apply(_s, _result!);
+
+        _exitReason = ExitReason.Victory;
+
+        _message = "VICTORY!";
+        _messageT = 999f;
+
+        // If the apply generated a level-up report, interrupt first
+        if (_result!.XpReport != null && _result.XpReport.LevelsGained > 0)
+            GoTo(Phase.LevelUp);
+        else
+            GoTo(Phase.VictorySummary);
     }
 
     protected override void DrawWorld(RenderContext rc)
@@ -333,7 +329,6 @@ public sealed class BattleScene : SceneBase
     {
         if (_white == null) return;
 
-        // In case you ever change InternalWidth/Height later, keep layout in sync:
         if (_screen.Width != PixelRenderer.InternalWidth || _screen.Height != PixelRenderer.InternalHeight)
             ComputeLayout();
 
@@ -342,10 +337,8 @@ public sealed class BattleScene : SceneBase
 
         sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
 
-        // Full-screen backplate (prevents “blue void” if world isn't drawn)
+        // Backplate + vignette
         sb.Draw(_white, _screen, new Color(10, 12, 22) * 1.0f);
-
-        // Subtle vignette/dim
         sb.Draw(_white, _screen, Color.Black * 0.22f);
 
         // Panels
@@ -377,27 +370,33 @@ public sealed class BattleScene : SceneBase
         }
         else
         {
-            var hint =
-                _phase switch
-                {
-                    Phase.Intro => "ENTER/A: START",
-                    Phase.VictorySummary => "ENTER/A: CONTINUE",
-                    Phase.Defeat => "ENTER/A: CONTINUE",
-                    Phase.Exit => "ENTER/A: LEAVE",
-                    _ => "ENTER/A: CONTINUE"
-                };
+            {
+                var hint =
+                    _phase switch
+                    {
+                        Phase.Intro => "ENTER/A: START",
+                        Phase.LevelUp => "ENTER/A: CONTINUE",
+                        Phase.VictorySummary => "ENTER/A: LEAVE  |  UP/DOWN: LOOT",
+                        Phase.Defeat => "ENTER/A: CONTINUE",
+                        Phase.Exit => "ENTER/A: LEAVE",
+                        _ => "ENTER/A: CONTINUE"
+                    };
 
-            _s.TitleFont.Draw(
-                sb,
-                hint,
-                new Vector2(_panelCommands.X + 18, _panelCommands.Y + 24),
-                Color.White * 0.75f,
-                1);
+                int scale = 1;
+                var size = _s.TitleFont.Measure(hint, scale);
+
+                int x = _panelCommands.X + 18;
+                int y = _panelCommands.Bottom - 12 - size.Y; // 12px padding from bottom
+
+                _s.TitleFont.Draw(sb, hint, new Vector2(x, y), Color.White * 0.75f, scale);
+            }
+
         }
 
         if (_phase == Phase.LevelUp)
         {
             DrawLevelUpPanel(sb);
+            if (_messageT > 0f) DrawMessage(sb);
             sb.End();
             return;
         }
@@ -438,6 +437,50 @@ public sealed class BattleScene : SceneBase
     }
 
     // ---------------- Layout ----------------
+
+    private void ComputeLayout()
+    {
+        int w = PixelRenderer.InternalWidth;
+        int h = PixelRenderer.InternalHeight;
+
+        _screen = new Rectangle(0, 0, w, h);
+
+        int margin = 18;
+        int gap = 16;
+
+        int usableW = w - margin * 2;
+        int usableH = h - margin * 2;
+
+        int topH = (int)(usableH * 0.62f);
+        int bottomH = usableH - topH - gap;
+
+        int colW = (usableW - gap) / 2;
+
+        int x0 = margin;
+        int x1 = margin + colW + gap;
+        int y0 = margin;
+        int y1 = margin + topH + gap;
+
+        _panelLeft = new Rectangle(x0, y0, colW, topH);
+        _panelRight = new Rectangle(x1, y0, colW, topH);
+
+        _panelCommands = new Rectangle(x0, y1, colW, bottomH);
+        _panelInfo = new Rectangle(x1, y1, colW, bottomH);
+
+        int pad = 14;
+        int btnW = _panelCommands.Width - pad * 2;
+        int btnH = 30;
+        int btnGap = 10;
+
+        int bx = _panelCommands.X + pad;
+        int by = _panelCommands.Y + pad + 6;
+
+        _btnAttack = new Rectangle(bx, by, btnW, btnH);
+        _btnRun = new Rectangle(bx, by + btnH + btnGap, btnW, btnH);
+    }
+
+    // ---------------- Drawing helpers ----------------
+
     private void DrawLevelUpPanel(SpriteBatch sb)
     {
         const int pad = 16;
@@ -456,79 +499,115 @@ public sealed class BattleScene : SceneBase
         _s.TitleFont.Draw(sb, "LEVEL UP!", new Vector2(x, y), Color.Gold * 0.95f, 1);
         y += _s.TitleFont.LineHeight(1) + 6;
 
-        _s.UiFont.Draw(
-            sb,
-            $"LEVEL {_xpReport!.OldLevel} → {_xpReport.NewLevel}",
-            new Vector2(x, y),
-            Color.White * 0.9f,
-            1);
+        var rep = _result?.XpReport;
+        if (rep == null)
+        {
+            _s.UiFont.Draw(sb, "LEVEL INCREASED", new Vector2(x, y), Color.White * 0.9f, 1);
+            return;
+        }
 
+        _s.UiFont.Draw(sb, $"LEVEL {rep.OldLevel} → {rep.NewLevel}", new Vector2(x, y), Color.White * 0.9f, 1);
         y += _s.UiFont.LineHeight(1) + 4;
 
-        _s.UiFont.Draw(
-            sb,
-            $"LEVELS GAINED: {_xpReport.LevelsGained}",
-            new Vector2(x, y),
-            Color.White * 0.75f,
-            1);
+        _s.UiFont.Draw(sb, $"LEVELS GAINED: {rep.LevelsGained}", new Vector2(x, y), Color.White * 0.75f, 1);
 
         y = r.Bottom - 26;
-
-        _s.UiFont.Draw(
-            sb,
-            "ENTER / A : CONTINUE",
-            new Vector2(x, y),
-            Color.White * 0.65f,
-            1);
+        _s.UiFont.Draw(sb, "ENTER / A : CONTINUE", new Vector2(x, y), Color.White * 0.65f, 1);
     }
 
-    private void ComputeLayout()
+    private void DrawVictorySummary(SpriteBatch sb)
     {
-        int w = PixelRenderer.InternalWidth;
-        int h = PixelRenderer.InternalHeight;
+        if (_result == null) return;
 
-        _screen = new Rectangle(0, 0, w, h);
+        const int pad = 10;
 
-        // Tuning knobs
-        int margin = 18;
-        int gap = 16;
+        var inner = new Rectangle(
+            _panelInfo.X + pad,
+            _panelInfo.Y + pad,
+            _panelInfo.Width - pad * 2,
+            _panelInfo.Height - pad * 2);
 
-        // Two rows: top row (status panels), bottom row (commands/info)
-        int usableW = w - margin * 2;
-        int usableH = h - margin * 2;
+        int x = inner.X;
+        int y = inner.Y;
 
-        // Top row height + bottom row height
-        int topH = (int)(usableH * 0.62f);
-        int bottomH = usableH - topH - gap;
+        int maxW = inner.Width;
 
-        // Two columns
-        int colW = (usableW - gap) / 2;
+        string Fit(string text)
+            => TrimToWidth(_s.UiFont, text.ToUpperInvariant(), maxW, 1);
 
-        int x0 = margin;
-        int x1 = margin + colW + gap;
-        int y0 = margin;
-        int y1 = margin + topH + gap;
+        void Line(string text, float alpha = 0.85f)
+        {
+            _s.UiFont.Draw(sb, Fit(text), new Vector2(x, y), Color.White * alpha, 1);
+            y += _s.UiFont.LineHeight(1);
+        }
 
-        _panelLeft = new Rectangle(x0, y0, colW, topH);
-        _panelRight = new Rectangle(x1, y0, colW, topH);
+        _s.TitleFont.Draw(sb, "REWARDS", new Vector2(x, y), Color.White * 0.9f, 1);
+        y += _s.TitleFont.LineHeight(1);
 
-        _panelCommands = new Rectangle(x0, y1, colW, bottomH);
-        _panelInfo = new Rectangle(x1, y1, colW, bottomH);
+        float xpK = MathHelper.Clamp(_payoutT / 0.6f, 0f, 1f);
+        float goldK = MathHelper.Clamp((_payoutT - 0.6f) / 0.6f, 0f, 1f);
 
-        // Buttons inside commands panel
-        int pad = 14;
-        int btnW = _panelCommands.Width - pad * 2;
-        int btnH = 30;
-        int btnGap = 10;
+        int shownXp = (int)MathF.Round(_result.Xp * xpK);
+        int shownGold = (int)MathF.Round(_result.Gold * goldK);
 
-        int bx = _panelCommands.X + pad;
-        int by = _panelCommands.Y + pad + 6;
+        Line($"XP:   +{shownXp}", 0.85f);
+        Line($"GOLD: +{shownGold}", 0.85f);
 
-        _btnAttack = new Rectangle(bx, by, btnW, btnH);
-        _btnRun = new Rectangle(bx, by + btnH + btnGap, btnW, btnH);
+        y += 2;
+
+        if (_result.XpReport != null && _result.XpReport.LevelsGained > 0)
+        {
+            Line($"LEVEL UP! +{_result.XpReport.LevelsGained}", 0.90f);
+            Line($"NOW LEVEL: {_result.XpReport.NewLevel}", 0.80f);
+            y += 2;
+        }
+
+        Line("LOOT:", 0.75f);
+
+        var loot = _result.Loot;
+        if (loot.Count == 0)
+        {
+            Line("(NONE)", 0.75f);
+            return;
+        }
+
+        int start = Math.Clamp(_lootScroll, 0, Math.Max(0, loot.Count - 1));
+
+        int remainingPx = inner.Bottom - y;
+        int lh = _s.UiFont.LineHeight(1);
+        int maxLines = Math.Max(1, remainingPx / lh);
+
+        int shown = 0;
+        for (int i = start; i < loot.Count && shown < maxLines; i++)
+        {
+            var (id, qty) = loot[i];
+
+            var name = _s.Items.DisplayNameOf(id);
+            var rarity = _s.Items.RarityOf(id);
+            var color = RarityColors.For(rarity);
+            var label = RarityColors.Label(rarity);
+
+            string text = $"{name} x{qty}{(string.IsNullOrEmpty(label) ? "" : " " + label)}";
+            string fitted = Fit(text);
+
+            if (rarity >= BeginnersLuck.Game.Items.ItemRarity.Rare)
+            {
+                var glow = new Rectangle(inner.X - 2, y - 1, inner.Width + 4, lh);
+                sb.Draw(_white!, glow, color * 0.10f);
+            }
+
+            _s.UiFont.Draw(sb, fitted, new Vector2(x, y), color * 0.90f, 1);
+
+            y += lh;
+            shown++;
+        }
+
+        if (start > 0 && (inner.Bottom - y) >= lh)
+            Line("(MORE ABOVE)", 0.55f);
+
+        if (start + shown < loot.Count && (inner.Bottom - y) >= lh)
+            Line("(MORE BELOW)", 0.55f);
     }
-
-    // ---------------- Drawing helpers ----------------
 
     private void DrawPlayerPanel(SpriteBatch sb)
     {
@@ -564,113 +643,8 @@ public sealed class BattleScene : SceneBase
         }
     }
 
-    private void DrawVictorySummary(SpriteBatch sb)
-    {
-        const int pad = 10;
-
-        var inner = new Rectangle(
-            _panelInfo.X + pad,
-            _panelInfo.Y + pad,
-            _panelInfo.Width - pad * 2,
-            _panelInfo.Height - pad * 2);
-
-        int x = inner.X;
-        int y = inner.Y;
-
-        int maxW = inner.Width;
-
-        string Fit(string text)
-            => TrimToWidth(_s.UiFont, text.ToUpperInvariant(), maxW, 1);
-
-        void Line(string text, float alpha = 0.85f)
-        {
-            _s.UiFont.Draw(sb, Fit(text), new Vector2(x, y), Color.White * alpha, 1);
-            y += _s.UiFont.LineHeight(1);
-        }
-
-        // Header
-        _s.TitleFont.Draw(sb, "REWARDS", new Vector2(x, y), Color.White * 0.9f, 1);
-        y += _s.TitleFont.LineHeight(1);
-
-        // Count-up XP / Gold
-        float xpK = MathHelper.Clamp(_payoutT / 0.6f, 0f, 1f);
-        float goldK = MathHelper.Clamp((_payoutT - 0.6f) / 0.6f, 0f, 1f);
-
-        int shownXp = (int)MathF.Round(_rewardXp * xpK);
-        int shownGold = (int)MathF.Round(_rewardGold * goldK);
-
-        Line($"XP:   +{shownXp}", 0.85f);
-        Line($"GOLD: +{shownGold}", 0.85f);
-
-        y += 2;
-
-        // Level-up report (if any)
-        if (_xpReport != null && _xpReport.LevelsGained > 0)
-        {
-            Line($"LEVEL UP! +{_xpReport.LevelsGained}", 0.90f);
-            Line($"NOW LEVEL: {_xpReport.NewLevel}", 0.80f);
-            y += 2;
-        }
-
-        // Loot section
-        Line("LOOT:", 0.75f);
-
-        if (_rewardLoot.Count == 0)
-        {
-            Line("(NONE)", 0.75f);
-            return;
-        }
-
-        int start = Math.Clamp(_lootScroll, 0, Math.Max(0, _rewardLoot.Count - 1));
-
-        int remainingPx = inner.Bottom - y;
-        int lh = _s.UiFont.LineHeight(1);
-        int maxLines = Math.Max(1, remainingPx / lh);
-
-        int shown = 0;
-        for (int i = start; i < _rewardLoot.Count && shown < maxLines; i++)
-        {
-            var (id, qty) = _rewardLoot[i];
-
-            var name = _s.Items.DisplayNameOf(id);
-            var rarity = _s.Items.RarityOf(id);
-            var color = RarityColors.For(rarity);
-            var label = RarityColors.Label(rarity);
-
-            // Build text and trim to width using your Fit()
-            string text = $"{name} x{qty}{(string.IsNullOrEmpty(label) ? "" : " " + label)}";
-            string fitted = Fit(text);
-
-            // Optional: subtle glow/backplate for Rare+
-            if (rarity >= BeginnersLuck.Game.Items.ItemRarity.Rare)
-            {
-                // Slightly padded strip behind the text line
-                var glow = new Rectangle(inner.X - 2, y - 1, inner.Width + 4, lh);
-                sb.Draw(_white!, glow, color * 0.10f);
-            }
-
-            _s.UiFont.Draw(
-                sb,
-                fitted,
-                new Vector2(x, y),
-                color * 0.90f,
-                1);
-
-            y += lh;
-            shown++;
-        }
-
-        // Scroll hints
-        if (start > 0 && (inner.Bottom - y) >= lh)
-            Line("(MORE ABOVE)", 0.55f);
-
-        if (start + shown < _rewardLoot.Count && (inner.Bottom - y) >= lh)
-            Line("(MORE BELOW)", 0.55f);
-    }
-
     private void DrawMessage(SpriteBatch sb)
     {
-        // Width relative to screen now, centered
         int w = _screen.Width;
         var r = new Rectangle((w / 2) - 190, 8, 380, 18);
 
@@ -764,57 +738,51 @@ public sealed class BattleScene : SceneBase
         return (lo <= 0) ? ell : text.Substring(0, lo) + ell;
     }
 
-    private void RollRewardsIfNeeded()
+    private void EnsureBattleResultBuilt(BattleOutcome outcome)
     {
-        if (_rewardsRolled) return;
-        _rewardsRolled = true;
+        if (_result != null) return;
 
-        _rewardXp = _encounter.Xp.Roll(_s.Rng);
-        _rewardGold = _encounter.Gold.Roll(_s.Rng);
+        int xp = 0;
+        int gold = 0;
+        var loot = new List<LootLine>();
 
-        _rewardLoot.Clear();
-
-        foreach (var d in _encounter.Loot)
+        if (outcome == BattleOutcome.Victory)
         {
-            // Guard: encounter loot must reference real items
-            if (!_s.Items.TryGet(d.ItemId, out _))
+            xp = _encounter.Xp.Roll(_s.Rng);
+            gold = _encounter.Gold.Roll(_s.Rng);
+
+            foreach (var d in _encounter.Loot)
             {
+                if (!_s.Items.TryGet(d.ItemId, out _))
+                {
 #if DEBUG
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Loot] Unknown item id '{d.ItemId}' in encounter '{_encounter.Id}'");
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[Loot] Unknown item id '{d.ItemId}' in encounter '{_encounter.Id}'");
 #endif
-                continue;
+                    continue;
+                }
+
+                int roll = _s.Rng.Next(1, 101);
+                if (roll > d.ChancePercent) continue;
+
+                int qty = d.MinQty;
+                if (d.MaxQty > d.MinQty)
+                    qty = _s.Rng.Next(d.MinQty, d.MaxQty + 1);
+
+                loot.Add(new LootLine(d.ItemId, qty));
             }
 
-            int roll = _s.Rng.Next(1, 101);
-            if (roll > d.ChancePercent) continue;
-
-            int qty = d.MinQty;
-            if (d.MaxQty > d.MinQty)
-                qty = _s.Rng.Next(d.MinQty, d.MaxQty + 1);
-
-            _rewardLoot.Add((d.ItemId, qty));
+            loot.Sort((a, b) => _s.Items.RarityOf(b.ItemId).CompareTo(_s.Items.RarityOf(a.ItemId)));
         }
 
-        // Optional: sort loot by rarity so good stuff floats to the top
-        _rewardLoot.Sort((a, b) =>
-            _s.Items.RarityOf(b.ItemId).CompareTo(_s.Items.RarityOf(a.ItemId)));
+        _result = new BattleResult
+        {
+            EncounterId = _encounter.Id,
+            EncounterName = _encounter.Name,
+            Outcome = outcome,
+            Xp = xp,
+            Gold = gold,
+            Loot = loot
+        };
     }
-
-
-    private void ApplyRewardsIfNeeded()
-    {
-        if (_rewardsApplied) return;
-        _rewardsApplied = true;
-
-        _xpReport = _s.Player.AddXpWithReport(_rewardXp);
-        _levelUpPending = _xpReport.LevelsGained > 0;
-
-        _s.Player.AddGold(_rewardGold);
-
-        foreach (var (id, qty) in _rewardLoot)
-            _s.Player.Inventory.Add(id, qty);
-    }
-
-
 }
