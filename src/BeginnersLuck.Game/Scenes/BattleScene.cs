@@ -17,16 +17,17 @@ namespace BeginnersLuck.Game.Scenes;
 public sealed class BattleScene : SceneBase
 {
 
-private enum Phase
-{
-    Intro,
-    PlayerSelect,
-    PlayerResolve,
-    EnemyResolve,
-    VictorySummary,
-    Defeat,
-    Exit
-}
+    private enum Phase
+    {
+        Intro,
+        PlayerSelect,
+        PlayerResolve,
+        EnemyResolve,
+        LevelUp,
+        VictorySummary,
+        Defeat,
+        Exit
+    }
 
 
     private sealed class Enemy
@@ -98,6 +99,7 @@ private enum Phase
     private int _lootScroll;              // index offset for loot list
     private float _payoutT;               // anim timer for “counting up” feel (optional)
     private PlayerXpReport? _xpReport;    // level-up info captured when applying XP
+    private bool _levelUpPending;
 
     public BattleScene(GameServices s, EncounterDef encounter, KeyboardState seedKs, GamePadState seedPad)
     {
@@ -195,37 +197,48 @@ private enum Phase
             }
 
             case Phase.PlayerResolve:
-            {
-                if (_phaseT < 0.05f) break;
-
-                var target = FirstLivingEnemy();
-                if (target == null)
                 {
-                    GoTo(Phase.VictorySummary);
+                    if (_phaseT < 0.05f) break;
+
+                    var target = FirstLivingEnemy();
+                    if (target == null)
+                    {
+                        if (_levelUpPending)
+                            GoTo(Phase.LevelUp);
+                        else
+                            GoTo(Phase.VictorySummary); break;
+                    }
+
+                    int dmg = _s.Rng.Next(3, 7); // 3-6
+                target.Hp = Math.Max(0, target.Hp - dmg);
+
+                    _message = $"YOU HIT {target.Name.ToUpperInvariant()} FOR {dmg}!";
+                    _messageT = 0.9f;
+
+                    if (AllEnemiesDown())
+                    {
+                        if (_levelUpPending)
+                            GoTo(Phase.LevelUp);
+                        else
+                            GoTo(Phase.VictorySummary);
+                    }
+                    else GoTo(Phase.EnemyResolve);
+
                     break;
                 }
 
-                int dmg = _s.Rng.Next(3, 7); // 3-6
-                target.Hp = Math.Max(0, target.Hp - dmg);
-
-                _message = $"YOU HIT {target.Name.ToUpperInvariant()} FOR {dmg}!";
-                _messageT = 0.9f;
-
-                if (AllEnemiesDown()) GoTo(Phase.VictorySummary);
-                else GoTo(Phase.EnemyResolve);
-
-                break;
-            }
-
             case Phase.EnemyResolve:
             {
-                if (_phaseT < 0.20f) break;
+                    if (_phaseT < 0.20f) break;
 
-                var attacker = FirstLivingEnemy();
-                if (attacker == null)
-                {
-                    GoTo(Phase.VictorySummary);
-                    break;
+                    var attacker = FirstLivingEnemy();
+                    if (attacker == null)
+                    {
+                        if (_levelUpPending)
+                            GoTo(Phase.LevelUp);
+                        else
+                            GoTo(Phase.VictorySummary);
+                        break;
                 }
 
                 int dmg = _s.Rng.Next(2, 6); // 2-5
@@ -293,8 +306,17 @@ private enum Phase
                     }
 
                     break;
-
                 }
+            case Phase.LevelUp:
+                {
+                    if (PressedConfirm(ks, pad))
+                    {
+                        _levelUpPending = false;
+                        GoTo(Phase.VictorySummary);
+                    }
+                    break;
+                }
+
         }
 
         _prevKs = ks;
@@ -372,6 +394,13 @@ private enum Phase
                 1);
         }
 
+        if (_phase == Phase.LevelUp)
+        {
+            DrawLevelUpPanel(sb);
+            sb.End();
+            return;
+        }
+
         if (_phase == Phase.VictorySummary)
         {
             DrawVictorySummary(sb);
@@ -408,6 +437,49 @@ private enum Phase
     }
 
     // ---------------- Layout ----------------
+    private void DrawLevelUpPanel(SpriteBatch sb)
+    {
+        const int pad = 16;
+
+        var r = new Rectangle(
+            _panelInfo.X + pad,
+            _panelInfo.Y + pad,
+            _panelInfo.Width - pad * 2,
+            _panelInfo.Height - pad * 2);
+
+        MenuRenderer.DrawPanel(sb, _white!, r, new Color(22, 18, 36) * 0.98f);
+
+        int x = r.X + 14;
+        int y = r.Y + 12;
+
+        _s.TitleFont.Draw(sb, "LEVEL UP!", new Vector2(x, y), Color.Gold * 0.95f, 1);
+        y += _s.TitleFont.LineHeight(1) + 6;
+
+        _s.UiFont.Draw(
+            sb,
+            $"LEVEL {_xpReport!.OldLevel} → {_xpReport.NewLevel}",
+            new Vector2(x, y),
+            Color.White * 0.9f,
+            1);
+
+        y += _s.UiFont.LineHeight(1) + 4;
+
+        _s.UiFont.Draw(
+            sb,
+            $"LEVELS GAINED: {_xpReport.LevelsGained}",
+            new Vector2(x, y),
+            Color.White * 0.75f,
+            1);
+
+        y = r.Bottom - 26;
+
+        _s.UiFont.Draw(
+            sb,
+            "ENTER / A : CONTINUE",
+            new Vector2(x, y),
+            Color.White * 0.65f,
+            1);
+    }
 
     private void ComputeLayout()
     {
@@ -545,9 +617,6 @@ private enum Phase
         float goldK = MathHelper.Clamp((_payoutT - 0.6f) / 0.6f, 0f, 1f);
         shownXp = (int)MathF.Round(_rewardXp * xpK);
         shownGold = (int)MathF.Round(_rewardGold * goldK);
-
-        Line($"XP:   +{shownXp}", 0.85f);
-        Line($"GOLD: +{shownGold}", 0.85f);
 
         y += 2;
 
@@ -708,10 +777,13 @@ private enum Phase
         _rewardsApplied = true;
 
         _xpReport = _s.Player.AddXpWithReport(_rewardXp);
+        _levelUpPending = _xpReport.LevelsGained > 0;
+
         _s.Player.AddGold(_rewardGold);
 
         foreach (var (id, qty) in _rewardLoot)
             _s.Player.Inventory.Add(id, qty);
     }
+
 
 }
