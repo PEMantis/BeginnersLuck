@@ -6,5 +6,6 @@ public sealed record ItemDef(
     bool Usable,
     UseEffect Effect,
     int Amount,
-    string? Description = null
+    string? Description = null,
+    ItemRarity Rarity = ItemRarity.Common
 );

@@ -14,7 +14,18 @@ public sealed class ItemDb
             Usable: true,
             Effect: UseEffect.HealHp,
             Amount: 20,
-            Description: "Restores a small amount of HP."
+            Description: "Restores a small amount of HP.",
+            Rarity: ItemRarity.Common
+        ));
+
+        Add(new ItemDef(
+            Id: "healing_potion",
+            Name: "Healing Potion",
+            Usable: true,
+            Effect: UseEffect.HealHp,
+            Amount: 40,
+            Description: "Restores a moderate amount of HP.",
+            Rarity: ItemRarity.Uncommon
         ));
 
         Add(new ItemDef(
@@ -23,7 +34,28 @@ public sealed class ItemDb
             Usable: false,
             Effect: UseEffect.None,
             Amount: 0,
-            Description: "Sticky and faintly warm."
+            Description: "Sticky and faintly warm.",
+            Rarity: ItemRarity.Common
+        ));
+
+        Add(new ItemDef(
+            Id: "herb",
+            Name: "Herb",
+            Usable: true,
+            Effect: UseEffect.HealHp,
+            Amount: 10,
+            Description: "A bitter leaf that restores a little HP.",
+            Rarity: ItemRarity.Common
+        ));
+
+        Add(new ItemDef(
+            Id: "ring_tin",
+            Name: "Tin Ring",
+            Usable: false,
+            Effect: UseEffect.None,
+            Amount: 0,
+            Description: "A cheap, slightly bent ring.",
+            Rarity: ItemRarity.Uncommon
         ));
     }
 
@@ -32,11 +64,19 @@ public sealed class ItemDb
 
     public bool TryGet(string id, out ItemDef def)
     {
-#pragma warning disable CS8601 // Possible null reference assignment.
+#pragma warning disable CS8601
         return _defs.TryGetValue(id, out def);
-#pragma warning restore CS8601 // Possible null reference assignment.
+#pragma warning restore CS8601
     }
 
+    // Prefer these for UI/Battle
+    public string DisplayNameOf(string id)
+        => _defs.TryGetValue(id, out var def) ? def.Name : id;
+
+    public ItemRarity RarityOf(string id)
+        => _defs.TryGetValue(id, out var def) ? def.Rarity : ItemRarity.Common;
+
+    // Back-compat helpers (fine to keep)
     public string NameOf(string id)
         => _defs.TryGetValue(id, out var def) ? def.Name : id;
 
@@ -50,6 +90,7 @@ public sealed class ItemDb
 
         return "No description available.";
     }
+
     public string UsePreviewOf(string id)
     {
         if (!_defs.TryGetValue(id, out var def))
@@ -66,7 +107,5 @@ public sealed class ItemDb
     }
 
     public bool IsUsable(string id)
-    => _defs.TryGetValue(id, out var def) && def.Usable && def.Effect != UseEffect.None;
-
-
+        => _defs.TryGetValue(id, out var def) && def.Usable && def.Effect != UseEffect.None;
 }

@@ -7,6 +7,7 @@ using BeginnersLuck.Engine.UI;
 using BeginnersLuck.Engine.Update;
 using BeginnersLuck.Game.Encounters;
 using BeginnersLuck.Game.Services;
+using BeginnersLuck.Game.UI;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
@@ -587,13 +588,31 @@ public sealed class BattleScene : SceneBase
             y += _s.UiFont.LineHeight(1);
         }
 
+        // Header
         _s.TitleFont.Draw(sb, "REWARDS", new Vector2(x, y), Color.White * 0.9f, 1);
         y += _s.TitleFont.LineHeight(1);
 
-        Line($"XP:   +{_rewardXp}", 0.85f);
-        Line($"GOLD: +{_rewardGold}", 0.85f);
+        // Count-up XP / Gold
+        float xpK = MathHelper.Clamp(_payoutT / 0.6f, 0f, 1f);
+        float goldK = MathHelper.Clamp((_payoutT - 0.6f) / 0.6f, 0f, 1f);
+
+        int shownXp = (int)MathF.Round(_rewardXp * xpK);
+        int shownGold = (int)MathF.Round(_rewardGold * goldK);
+
+        Line($"XP:   +{shownXp}", 0.85f);
+        Line($"GOLD: +{shownGold}", 0.85f);
 
         y += 2;
+
+        // Level-up report (if any)
+        if (_xpReport != null && _xpReport.LevelsGained > 0)
+        {
+            Line($"LEVEL UP! +{_xpReport.LevelsGained}", 0.90f);
+            Line($"NOW LEVEL: {_xpReport.NewLevel}", 0.80f);
+            y += 2;
+        }
+
+        // Loot section
         Line("LOOT:", 0.75f);
 
         if (_rewardLoot.Count == 0)
@@ -608,50 +627,47 @@ public sealed class BattleScene : SceneBase
         int lh = _s.UiFont.LineHeight(1);
         int maxLines = Math.Max(1, remainingPx / lh);
 
-        // Show rewards with a tiny “count up” feel (optional)
-        int shownXp = _rewardXp;
-        int shownGold = _rewardGold;
-
-        // If you want a quick count-up: first 0.6s for XP, next 0.6s for gold
-        float xpK = MathHelper.Clamp(_payoutT / 0.6f, 0f, 1f);
-        float goldK = MathHelper.Clamp((_payoutT - 0.6f) / 0.6f, 0f, 1f);
-        shownXp = (int)MathF.Round(_rewardXp * xpK);
-        shownGold = (int)MathF.Round(_rewardGold * goldK);
-
-        y += 2;
-
-        // Level-up report (if any)
-        if (_xpReport != null && _xpReport.LevelsGained > 0)
-        {
-            Line($"LEVEL UP! +{_xpReport.LevelsGained}", 0.90f);
-            Line($"NOW LEVEL: {_xpReport.NewLevel}", 0.80f);
-            y += 2;
-        }
-
-        Line("LOOT:", 0.75f);
-
-        if (_rewardLoot.Count == 0)
-        {
-            Line("(NONE)", 0.75f);
-            return;
-        }
-
         int shown = 0;
         for (int i = start; i < _rewardLoot.Count && shown < maxLines; i++)
         {
             var (id, qty) = _rewardLoot[i];
-            var name = _s.Items.NameOf(id);
-            Line($"{name} x{qty}", 0.75f);
+
+            var name = _s.Items.DisplayNameOf(id);
+            var rarity = _s.Items.RarityOf(id);
+            var color = RarityColors.For(rarity);
+            var label = RarityColors.Label(rarity);
+
+            // Build text and trim to width using your Fit()
+            string text = $"{name} x{qty}{(string.IsNullOrEmpty(label) ? "" : " " + label)}";
+            string fitted = Fit(text);
+
+            // Optional: subtle glow/backplate for Rare+
+            if (rarity >= BeginnersLuck.Game.Items.ItemRarity.Rare)
+            {
+                // Slightly padded strip behind the text line
+                var glow = new Rectangle(inner.X - 2, y - 1, inner.Width + 4, lh);
+                sb.Draw(_white!, glow, color * 0.10f);
+            }
+
+            _s.UiFont.Draw(
+                sb,
+                fitted,
+                new Vector2(x, y),
+                color * 0.90f,
+                1);
+
+            y += lh;
             shown++;
         }
 
+        // Scroll hints
         if (start > 0 && (inner.Bottom - y) >= lh)
             Line("(MORE ABOVE)", 0.55f);
 
         if (start + shown < _rewardLoot.Count && (inner.Bottom - y) >= lh)
             Line("(MORE BELOW)", 0.55f);
-
     }
+
     private void DrawMessage(SpriteBatch sb)
     {
         // Width relative to screen now, centered
@@ -760,6 +776,16 @@ public sealed class BattleScene : SceneBase
 
         foreach (var d in _encounter.Loot)
         {
+            // Guard: encounter loot must reference real items
+            if (!_s.Items.TryGet(d.ItemId, out _))
+            {
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine(
+                    $"[Loot] Unknown item id '{d.ItemId}' in encounter '{_encounter.Id}'");
+#endif
+                continue;
+            }
+
             int roll = _s.Rng.Next(1, 101);
             if (roll > d.ChancePercent) continue;
 
@@ -769,7 +795,12 @@ public sealed class BattleScene : SceneBase
 
             _rewardLoot.Add((d.ItemId, qty));
         }
+
+        // Optional: sort loot by rarity so good stuff floats to the top
+        _rewardLoot.Sort((a, b) =>
+            _s.Items.RarityOf(b.ItemId).CompareTo(_s.Items.RarityOf(a.ItemId)));
     }
+
 
     private void ApplyRewardsIfNeeded()
     {
