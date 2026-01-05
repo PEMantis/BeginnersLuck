@@ -7,7 +7,6 @@ public sealed class BasicEncounterSource : IEncounterSource
 {
     public EncounterDef PickEncounter(ZoneInfo zone, Random rng)
     {
-        // Totally runtime. Replace later with procedural tables, AI, whatever.
         return zone.Id switch
         {
             ZoneId.Grasslands => Roll(rng,
@@ -27,7 +26,9 @@ public sealed class BasicEncounterSource : IEncounterSource
             ZoneId.Ruins => new EncounterDef("skeletons", "Skeletons",
                 new[] { new EnemyDef("skeleton", "Skeleton", 18), new EnemyDef("skeleton", "Skeleton", 18) }),
 
-            _ => new EncounterDef("nothing", "Nothing Here", Array.Empty<EnemyDef>())
+            // ✅ Dev-time guardrail: don't return empty encounters silently.
+            _ => throw new InvalidOperationException(
+                $"No encounter table for ZoneId={zone.Id}. Add it to BasicEncounterSource or fix ZoneResolver.")
         };
     }
 

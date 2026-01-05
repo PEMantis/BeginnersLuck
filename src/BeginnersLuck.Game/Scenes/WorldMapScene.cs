@@ -37,7 +37,7 @@ public sealed class WorldMapScene : SceneBase
     private KeyboardState _prevKs;
     private GamePadState _prevPad;
 
-    // Encounter toast (kept, but not actively used here yet)
+    // Encounter toast
     private bool _toastActive;
     private float _toastT;
     private readonly float _toastDuration = 0.55f;
@@ -57,9 +57,13 @@ public sealed class WorldMapScene : SceneBase
 
     private Dir _lastWorldMoveDir = Dir.North;
     private readonly CameraZoom.State _zoom = new() { MinZoom = 0.5f, MaxZoom = 3.0f, Step = 0.12f };
-
-    // ✅ New: camera toggle + follow feel
-    private bool _followCamera = true;
+    private float _lastEncounterChance;
+    private ZoneInfo _lastZone;
+    private int _debugMoves;
+    private int _debugRolls;
+    private int _debugStarts;
+    private double _debugLastRoll;
+    private bool _debugTriedThisStep;
 
     public WorldMapScene(GameServices s)
     {
@@ -174,19 +178,14 @@ public sealed class WorldMapScene : SceneBase
     {
         if (_map == null) return;
 
-        // ✅ If we just popped back from local, consume the pending exit once.
+        // If we just popped back from local, consume the pending exit once.
         ConsumePendingLocalExit();
 
         var ks = Keyboard.GetState();
         var pad = GamePad.GetState(PlayerIndex.One);
+        _debugTriedThisStep = false;
 
-        // ✅ Camera follow toggle (dev)
-        if (Pressed(ks, Keys.F7))
-        {
-            _followCamera = !_followCamera;
-            _s.Toasts.Push(_followCamera ? "Cam: follow" : "Cam: locked", 0.6f);
-        }
-
+        // Encounter toast active: tick + block input
         if (_toastActive)
         {
             _toastT += (float)uc.GameTime.ElapsedGameTime.TotalSeconds;
@@ -208,6 +207,7 @@ public sealed class WorldMapScene : SceneBase
             return;
         }
 
+        // Pause
         if (Pressed(ks, Keys.Escape) || Pressed(pad, Buttons.Start) || Pressed(pad, Buttons.Back))
         {
             _s.Scenes.Push(new PauseScene(_s));
@@ -216,6 +216,7 @@ public sealed class WorldMapScene : SceneBase
             return;
         }
 
+        // Hub/Menu
         if (Pressed(ks, Keys.Tab) || Pressed(pad, Buttons.Y))
         {
             _s.Scenes.Push(new MenuHubScene(_s, ks, startTab: 0));
@@ -240,6 +241,7 @@ public sealed class WorldMapScene : SceneBase
 
             var purpose = LocalMapPurpose.Town;
 
+            // delete cached local so it regenerates with Town purpose
             string localBin = WorldPaths.LocalBin(seed, wx, wy);
             if (File.Exists(localBin))
                 File.Delete(localBin);
@@ -265,7 +267,7 @@ public sealed class WorldMapScene : SceneBase
             return;
         }
 
-        // Movement (grid)
+        // Movement (edge-triggered)
         Point dir = Point.Zero;
 
         if (Pressed(ks, Keys.W) || Pressed(ks, Keys.Up)) dir = new Point(0, -1);
@@ -281,6 +283,8 @@ public sealed class WorldMapScene : SceneBase
             else if (Pressed(pad, Buttons.DPadRight)) dir = new Point(1, 0);
         }
 
+        bool moved = false;
+
         if (dir != Point.Zero)
         {
             var next = _playerCell + dir;
@@ -289,6 +293,58 @@ public sealed class WorldMapScene : SceneBase
                 if (!_map.IsSolidCell(next.X, next.Y))
                 {
                     _playerCell = next;
+                    _debugMoves++;
+                    _debugTriedThisStep = true;
+                    if (_world != null && _terrainFlat != null && _flagsFlat != null)
+                    {
+                        int idx = _playerCell.X + _playerCell.Y * _world.Width;
+                        var tid = (TileId)_terrainFlat[idx];
+                        var flags = (TileFlags)_flagsFlat[idx];
+                        _lastZone = ZoneResolver.ResolveFrom(tid, flags);
+                    }
+                    else
+                    {
+                        _lastZone = new ZoneInfo(ZoneId.Grasslands, 0, "plains_low");
+                    }
+                    _lastZone = ZoneResolver.Resolve(_s, _playerCell);
+                    _lastEncounterChance = _s.EncounterDirector.ComputeChancePerStep(_lastZone);
+
+                    _debugRolls++;
+                    _debugLastRoll = _s.Rng.NextDouble();
+
+                    if (_debugLastRoll <= _lastEncounterChance)
+                    {
+                        _debugStarts++;
+
+                        // Try to start via the normal flow
+                        var debugIntent = _s.EncounterDirector.OnPlayerMoved(_playerCell, _lastZone, _s.Rng);
+                        if (debugIntent.HasValue)
+                        {
+                            StartEncounterToast(debugIntent.Value.Encounter, ks, pad);
+                            _prevKs = ks;
+                            _prevPad = pad;
+                            return;
+                        }
+                        else
+                        {
+                            _s.Toasts.Push("Hit chance but intent was null (source returned empty?)", 1.2f);
+                        }
+                    }
+
+                    moved = true;
+                    // Encounters: only roll when a move actually happened
+                    _lastZone = ZoneResolver.Resolve(_s, _playerCell);
+                    _lastEncounterChance = _s.EncounterDirector.ComputeChancePerStep(_lastZone);
+
+                    var intent = _s.EncounterDirector.OnPlayerMoved(_playerCell, _lastZone, _s.Rng);
+                    if (intent.HasValue)
+                    {
+                        StartEncounterToast(intent.Value.Encounter, ks, pad);
+
+                        _prevKs = ks;
+                        _prevPad = pad;
+                        return;
+                    }
 
                     if (dir.X == 1) _lastWorldMoveDir = Dir.East;
                     else if (dir.X == -1) _lastWorldMoveDir = Dir.West;
@@ -296,13 +352,31 @@ public sealed class WorldMapScene : SceneBase
                     else if (dir.Y == -1) _lastWorldMoveDir = Dir.North;
                 }
                 else
-                {
                     _s.Toasts.Push("Blocked.", 0.35f);
-                }
             }
         }
 
-        // DEV: jump into known-good local map (seed777 local_262_20)
+        // ✅ Step 3: Encounter roll AFTER a successful move
+        if (moved)
+        {
+            var zone = ZoneResolver.Resolve(_s, _playerCell);
+            var intent = _s.EncounterDirector.OnPlayerMoved(_playerCell, zone, _s.Rng);
+
+            if (intent.HasValue)
+            {
+                // EncounterIntent's exact property name might differ in your codebase.
+                // Your EncounterDirector constructs: new EncounterIntent(enc, zone, newCell)
+                // So it almost certainly exposes that EncounterDef as Encounter or Def.
+                var enc = intent.Value.Encounter; // <-- If this doesn't compile, paste EncounterIntent and I'll fix this line.
+                StartEncounterToast(enc, ks, pad);
+
+                _prevKs = ks;
+                _prevPad = pad;
+                return;
+            }
+        }
+
+        // DEV: jump into known-good local map (F9 / RightStick)
         if (Pressed(ks, Keys.F9) || Pressed(pad, Buttons.RightStick))
         {
             int seed = _s.World.WorldSeed;
@@ -322,6 +396,38 @@ public sealed class WorldMapScene : SceneBase
             _prevPad = pad;
             return;
         }
+
+        // DEV: Force battle immediately (bypasses EncounterDirector/IEncounterSource)
+        // F7 / RightShoulder
+        if (Pressed(ks, Keys.F7) || Pressed(pad, Buttons.RightShoulder))
+        {
+            var debugEncounter = new EncounterDef(
+                id: "debug_slime",
+                name: "Debug Slime",
+                enemies: new[]
+                {
+            new EnemyDef("slime", "Slime", 12)
+                });
+
+            // Skip toast entirely: go straight to BattleScene so we prove the integration.
+            if (!_s.Fade.Active)
+            {
+                _s.Fade.Start(0.10f, () =>
+                {
+                    _s.Scenes.Push(new BattleScene(_s, debugEncounter, ks, pad));
+                });
+            }
+            else
+            {
+                // Even if fade is stuck active, still push so you SEE something.
+                _s.Scenes.Push(new BattleScene(_s, debugEncounter, ks, pad));
+            }
+
+            _prevKs = ks;
+            _prevPad = pad;
+            return;
+        }
+
 
         // Enter / Generate Local Map (E / A)
         if (Pressed(ks, Keys.E) || Pressed(pad, Buttons.A))
@@ -360,13 +466,10 @@ public sealed class WorldMapScene : SceneBase
             return;
         }
 
-        // Zoom
         CameraZoom.ApplyMouseWheel(_cam, _zoom, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
         CameraZoom.ApplyBumpers(_cam, _zoom, pad, _prevPad, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
 
-        // ✅ Follow feel (deadzone) or locked
-        if (_followCamera)
-            UpdateCameraDeadzone();
+        _cam.Position = _map.CellToWorldCenter(_playerCell);
 
         _prevKs = ks;
         _prevPad = pad;
@@ -407,40 +510,6 @@ public sealed class WorldMapScene : SceneBase
         _s.Toasts.Push($"Exit {pending.ExitDir} -> WORLD {_playerCell.X},{_playerCell.Y}", 0.6f);
     }
 
-    // ✅ Deadzone camera (world-space). Player moves on screen until they push outside the box.
-    private void UpdateCameraDeadzone()
-    {
-        if (_map == null) return;
-
-        // Start centered if camera hasn't moved yet
-        if (_cam.Position == Vector2.Zero)
-            _cam.Position = _map.CellToWorldCenter(_playerCell);
-
-        float z = _cam.Zoom;
-
-        // For FEEL only. We are not changing TileMapRenderer view semantics.
-        float vw = PixelRenderer.InternalWidth / z;
-        float vh = PixelRenderer.InternalHeight / z;
-
-        float mx = vw * 0.25f;
-        float my = vh * 0.25f;
-
-        var player = _map.CellToWorldCenter(_playerCell);
-        var cam = _cam.Position;
-
-        float left = cam.X - vw * 0.5f + mx;
-        float right = cam.X + vw * 0.5f - mx;
-        float top = cam.Y - vh * 0.5f + my;
-        float bottom = cam.Y + vh * 0.5f - my;
-
-        if (player.X < left) cam.X -= (left - player.X);
-        if (player.X > right) cam.X += (player.X - right);
-        if (player.Y < top) cam.Y -= (top - player.Y);
-        if (player.Y > bottom) cam.Y += (player.Y - bottom);
-
-        _cam.Position = cam;
-    }
-
     protected override void DrawWorld(RenderContext rc)
     {
         if (_map == null || _mapRenderer == null || _white == null) return;
@@ -452,7 +521,6 @@ public sealed class WorldMapScene : SceneBase
             blendState: BlendState.AlphaBlend,
             transformMatrix: _cam.GetViewMatrix());
 
-        // NOTE: keeping your current semantics unchanged
         var view = new Rectangle(
             (int)(_cam.Position.X - PixelRenderer.InternalWidth * 0.5f),
             (int)(_cam.Position.Y - PixelRenderer.InternalHeight * 0.5f),
@@ -474,13 +542,11 @@ public sealed class WorldMapScene : SceneBase
         var sb = rc.SpriteBatch;
         sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
 
-        var hud = new Rectangle(8, 8, 260, 62);
+        var hud = new Rectangle(8, 8, 260, 52);
         sb.Draw(_white, hud, new Color(10, 10, 18) * 0.75f);
 
         _s.UiFont.Draw(sb, $"GOLD: {_s.Player.Gold}", new Vector2(hud.X + 8, hud.Y + 8), Color.White * 0.9f, 1);
         _s.UiFont.Draw(sb, $"XP:   {_s.Player.TotalXp}", new Vector2(hud.X + 8, hud.Y + 18), Color.White * 0.9f, 1);
-
-        _s.UiFont.Draw(sb, $"F7: cam {(_followCamera ? "follow" : "locked")}", new Vector2(hud.X + 8, hud.Y + 28), Color.White * 0.75f, 1);
 
         if (_world != null && _terrainFlat != null && _flagsFlat != null && _map != null)
         {
@@ -489,9 +555,20 @@ public sealed class WorldMapScene : SceneBase
 
             _s.UiFont.Draw(sb,
                 $"WORLD: {_playerCell.X},{_playerCell.Y}  {tid}  {_flagsFlat[idx]}  solid={_map.IsSolidCell(_playerCell.X, _playerCell.Y)}",
-                new Vector2(hud.X + 8, hud.Y + 40),
+                new Vector2(hud.X + 8, hud.Y + 32),
                 Color.White * 0.75f, 1);
         }
+        _s.UiFont.Draw(sb,
+            $"ZONE: {_lastZone.Id} danger={_lastZone.Danger} table={_lastZone.EncounterTableId} " +
+            $"chance={_lastEncounterChance:P0} cd={_s.EncounterDirector.CooldownRemainingSteps}",
+            new Vector2(hud.X + 8, hud.Y + 44),
+            Color.White * 0.7f, 1);
+
+        _s.UiFont.Draw(sb,
+            $"DBG: moves={_debugMoves} rolls={_debugRolls} starts={_debugStarts} " +
+            $"lastRoll={_debugLastRoll:0.000} tried={_debugTriedThisStep} fade={_s.Fade.Active} toast={_toastActive}",
+            new Vector2(hud.X + 8, hud.Y + 56),
+            Color.White * 0.7f, 1);
 
         sb.End();
     }
@@ -517,10 +594,10 @@ public sealed class WorldMapScene : SceneBase
             for (int i = 0; i < n; i++)
             {
                 c.Terrain[i] = (TileId)ch.Terrain[i];
-                c.Flags[i] = (TileFlags)ch.Flags[i];
-                c.Biome[i] = (BiomeId)ch.Biome[i];
+                c.Flags[i]   = (TileFlags)ch.Flags[i];
+                c.Biome[i]   = (BiomeId)ch.Biome[i];
 
-                c.Region[i] = (ushort)ch.Region[i];
+                c.Region[i]    = (ushort)ch.Region[i];
                 c.SubRegion[i] = (ushort)ch.SubRegion[i];
             }
 

@@ -68,6 +68,7 @@ public sealed class LocalMapScene : SceneBase
 
         _map = new TileMap(n, n, tileSize, tiles);
 
+        // Collision
         for (int y = 0; y < n; y++)
         for (int x = 0; x < n; x++)
         {
@@ -112,6 +113,7 @@ public sealed class LocalMapScene : SceneBase
         var ks = Keyboard.GetState();
         var pad = GamePad.GetState(PlayerIndex.One);
 
+        // Back without travel
         if (Pressed(ks, Keys.Escape) || Pressed(pad, Buttons.B))
         {
             _s.Scenes.Pop();
@@ -120,6 +122,7 @@ public sealed class LocalMapScene : SceneBase
             return;
         }
 
+        // Movement
         Point dir = Point.Zero;
 
         if (Pressed(ks, Keys.W) || Pressed(ks, Keys.Up)) dir = new Point(0, -1);
@@ -139,36 +142,44 @@ public sealed class LocalMapScene : SceneBase
         {
             var next = _playerCell + dir;
 
+            // Edge exit attempt
             if (IsOutOfBounds(next, _map.Width, _map.Height))
             {
                 var exitDir = DirFromStep(dir);
 
-                var exit = new LocalExitResult(
-                    FromWorldX: _local.WorldX,
-                    FromWorldY: _local.WorldY,
-                    ExitDir: exitDir,
-                    Purpose: _purpose,
-                    LocalBinPath: _mapBinPath,
-                    LocalExitCell: _playerCell
-                );
+                if (PortalAllowsExit(_local, exitDir))
+                {
+                    var exit = new LocalExitResult(
+                        FromWorldX: _local.WorldX,
+                        FromWorldY: _local.WorldY,
+                        ExitDir: exitDir,
+                        Purpose: _purpose,
+                        LocalBinPath: _mapBinPath,
+                        LocalExitCell: _playerCell
+                    );
 
-                _s.World.Travel.PendingLocalExit = exit;
+                    _s.World.Travel.PendingLocalExit = exit;
 
-                if (!_s.Fade.Active)
-                    _s.Fade.Start(0.15f, () => _s.Scenes.Pop());
-                else
-                    _s.Scenes.Pop();
+                    if (!_s.Fade.Active)
+                        _s.Fade.Start(0.15f, () => _s.Scenes.Pop());
+                    else
+                        _s.Scenes.Pop();
 
-                _prevKs = ks;
-                _prevPad = pad;
-                return;
+                    _prevKs = ks;
+                    _prevPad = pad;
+                    return;
+                }
+
+                _s.Toasts.Push("No exit here.", 0.35f);
             }
-
-            if (!_map.IsSolidCell(next.X, next.Y))
-                _playerCell = next;
+            else
+            {
+                if (!_map.IsSolidCell(next.X, next.Y))
+                    _playerCell = next;
+            }
         }
 
-        // Town Center interaction: stand on TownCenter and press A / Enter / Space / E
+        // Town Center interaction (gate that opens TownScene)
         if (_townCenter.HasValue)
         {
             var tc = _townCenter.Value;
@@ -190,13 +201,10 @@ public sealed class LocalMapScene : SceneBase
             }
         }
 
+        _cam.Position = _map.CellToWorldCenter(_playerCell);
 
-        // Zoom
         CameraZoom.ApplyMouseWheel(_cam, _zoom, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
         CameraZoom.ApplyBumpers(_cam, _zoom, pad, _prevPad, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
-
-        // Follow
-        _cam.Position = _map.CellToWorldCenter(_playerCell);
 
         _prevKs = ks;
         _prevPad = pad;
@@ -213,16 +221,67 @@ public sealed class LocalMapScene : SceneBase
             blendState: BlendState.AlphaBlend,
             transformMatrix: _cam.GetViewMatrix());
 
-        // ✅ Correct: viewWorldPixels must be zoom-aware because transform scales the world.
-        var view = ComputeViewWorldPixels(_cam);
+        var view = new Rectangle(
+            (int)(_cam.Position.X - PixelRenderer.InternalWidth * 0.5f),
+            (int)(_cam.Position.Y - PixelRenderer.InternalHeight * 0.5f),
+            PixelRenderer.InternalWidth,
+            PixelRenderer.InternalHeight);
+
         _mapRenderer.Draw(sb, _map, view);
 
-        // Town center marker
+        // Overlays (roads/rivers)
+        int n = _local.Size;
+        for (int y = 0; y < n; y++)
+        for (int x = 0; x < n; x++)
+        {
+            int i = x + y * n;
+            var f = _local.Flags[i];
+            if (f == TileFlags.None) continue;
+
+            var tl = _map.CellToWorldTopLeft(new Point(x, y));
+
+            if ((f & TileFlags.Road) != 0)
+            {
+                var mask = NeighborMask(_local, x, y, TileFlags.Road);
+
+                sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 6, 4, 4), Color.SaddleBrown);
+
+                if (mask.HasFlag(NMask.North)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 7, (int)tl.Y + 0, 2, 6), Color.SaddleBrown);
+                if (mask.HasFlag(NMask.South)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 7, (int)tl.Y + 10, 2, 6), Color.SaddleBrown);
+                if (mask.HasFlag(NMask.West)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 0, (int)tl.Y + 7, 6, 2), Color.SaddleBrown);
+                if (mask.HasFlag(NMask.East)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 10, (int)tl.Y + 7, 6, 2), Color.SaddleBrown);
+            }
+
+            if ((f & TileFlags.River) != 0)
+            {
+                var mask = NeighborMask(_local, x, y, TileFlags.River);
+
+                sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 6, 4, 4), Color.CornflowerBlue);
+
+                if (mask.HasFlag(NMask.North)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 0, 4, 6), Color.CornflowerBlue);
+                if (mask.HasFlag(NMask.South)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 10, 4, 6), Color.CornflowerBlue);
+                if (mask.HasFlag(NMask.West)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 0, (int)tl.Y + 6, 6, 4), Color.CornflowerBlue);
+                if (mask.HasFlag(NMask.East)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 10, (int)tl.Y + 6, 6, 4), Color.CornflowerBlue);
+            }
+        }
+
+        // Town center marker (readable plaza tile)
         if (_townCenter.HasValue)
         {
             var tc = _townCenter.Value;
             var tl = _map.CellToWorldTopLeft(tc);
-            sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 6, 20, 20), Color.LimeGreen * 0.85f);
+            var r = new Rectangle((int)tl.X, (int)tl.Y, _map.TileSize, _map.TileSize);
+
+            sb.Draw(_s.PixelWhite, new Rectangle(r.X + 3, r.Y + 3, r.Width - 6, r.Height - 6), new Color(22, 22, 35) * 0.85f);
+
+            // border
+            sb.Draw(_s.PixelWhite, new Rectangle(r.X, r.Y, r.Width, 1), Color.Gold * 0.65f);
+            sb.Draw(_s.PixelWhite, new Rectangle(r.X, r.Y + r.Height - 1, r.Width, 1), Color.Gold * 0.65f);
+            sb.Draw(_s.PixelWhite, new Rectangle(r.X, r.Y, 1, r.Height), Color.Gold * 0.65f);
+            sb.Draw(_s.PixelWhite, new Rectangle(r.X + r.Width - 1, r.Y, 1, r.Height), Color.Gold * 0.65f);
+
+            // center dot
+            sb.Draw(_s.PixelWhite, new Rectangle(r.X + r.Width / 2 - 2, r.Y + r.Height / 2 - 2, 4, 4), Color.Gold * 0.95f);
         }
 
         // Player marker
@@ -243,41 +302,32 @@ public sealed class LocalMapScene : SceneBase
         int i = _playerCell.X + _playerCell.Y * n;
 
         _s.UiFont.Draw(sb, $"LOCAL {_local.Size}x{_local.Size} ({_local.WorldX},{_local.WorldY})  {_purpose}",
-            new Vector2(8, 8), Color.White * 0.9f, scale: 1);
+            new Vector2(8, 8), Color.White * 0.9f, 1);
 
         _s.UiFont.Draw(sb, "ESC/B: back  |  Walk off edge to exit",
-            new Vector2(8, 18), Color.White * 0.7f, scale: 1);
+            new Vector2(8, 18), Color.White * 0.7f, 1);
 
         _s.UiFont.Draw(sb,
             $"P: {_playerCell.X},{_playerCell.Y} solid={_map.IsSolidCell(_playerCell.X,_playerCell.Y)} tileIndex={_map.GetTileId(_playerCell.X,_playerCell.Y)} terrain={_local.Terrain[i]} flags={_local.Flags[i]}",
-            new Vector2(8, 28),
-            Color.White * 0.85f,
-            scale: 1);
+            new Vector2(8, 28), Color.White * 0.85f, 1);
 
         _s.UiFont.Draw(sb,
-            _townCenter.HasValue ? $"TownCenter: {_townCenter.Value.X},{_townCenter.Value.Y} (Stand + A)"
+            _townCenter.HasValue ? $"TownCenter: {_townCenter.Value.X},{_townCenter.Value.Y}"
                                  : "TownCenter: (none)",
-            new Vector2(8, 38),
-            Color.White * 0.75f, 1);
+            new Vector2(8, 38), Color.White * 0.75f, 1);
+
+        // Interaction prompt when standing on it
+        if (_townCenter.HasValue && _playerCell == _townCenter.Value)
+        {
+            const string prompt = "A / Enter / Space / E: Enter Town";
+            int y = PixelRenderer.InternalHeight - 22;
+
+            sb.Draw(_s.PixelWhite, new Rectangle(6, y - 4, 220, 18), new Color(10, 10, 18) * 0.75f);
+            _s.UiFont.Draw(sb, prompt, new Vector2(12, y), Color.Gold * 0.95f, 1);
+        }
 
         sb.End();
     }
-
-    // --- helpers ---
-
-    private static Rectangle ComputeViewWorldPixels(Camera2D cam)
-    {
-        float z = cam.Zoom;
-        float vw = PixelRenderer.InternalWidth / z;
-        float vh = PixelRenderer.InternalHeight / z;
-
-        return new Rectangle(
-            (int)(cam.Position.X - vw * 0.5f),
-            (int)(cam.Position.Y - vh * 0.5f),
-            (int)vw,
-            (int)vh);
-    }
-
 
     private static bool IsOutOfBounds(Point p, int w, int h)
         => p.X < 0 || p.Y < 0 || p.X >= w || p.Y >= h;
@@ -289,6 +339,8 @@ public sealed class LocalMapScene : SceneBase
         if (step.Y == 1) return Dir.South;
         return Dir.North;
     }
+
+    private static bool PortalAllowsExit(LocalMapData local, Dir d) => true;
 
     private bool Pressed(KeyboardState ks, Keys k) => ks.IsKeyDown(k) && !_prevKs.IsKeyDown(k);
     private bool Pressed(GamePadState pad, Buttons b) => pad.IsButtonDown(b) && !_prevPad.IsButtonDown(b);
@@ -455,6 +507,31 @@ public sealed class LocalMapScene : SceneBase
         return start;
     }
 
+    [Flags]
+    private enum NMask
+    {
+        None = 0,
+        North = 1 << 0,
+        East = 1 << 1,
+        South = 1 << 2,
+        West = 1 << 3
+    }
+
+    private static NMask NeighborMask(LocalMapData local, int x, int y, TileFlags flag)
+    {
+        int n = local.Size;
+        int idx(int xx, int yy) => xx + yy * n;
+
+        NMask m = NMask.None;
+
+        if (y > 0 && (local.Flags[idx(x, y - 1)] & flag) != 0) m |= NMask.North;
+        if (x < n - 1 && (local.Flags[idx(x + 1, y)] & flag) != 0) m |= NMask.East;
+        if (y < n - 1 && (local.Flags[idx(x, y + 1)] & flag) != 0) m |= NMask.South;
+        if (x > 0 && (local.Flags[idx(x - 1, y)] & flag) != 0) m |= NMask.West;
+
+        return m;
+    }
+
     private static Point ResolveFallbackTownCenter(LocalMapData local, TileMap map)
     {
         int n = local.Size;
@@ -491,5 +568,4 @@ public sealed class LocalMapScene : SceneBase
             return true;
         }
     }
-
 }

@@ -9,5 +9,6 @@ public enum ZoneId
     Road = 3,
     Ruins = 4,
     Lake = 5,
-    Mountains = 6
+    Mountains = 6,
+    Plains = 7
 }
