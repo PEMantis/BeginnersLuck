@@ -5,6 +5,7 @@ using BeginnersLuck.Engine.Scenes;
 using BeginnersLuck.Engine.Transitions;
 using BeginnersLuck.Engine.UI;
 using BeginnersLuck.Game.Encounters;
+using BeginnersLuck.Game.Graphics;
 using BeginnersLuck.Game.Items;
 using BeginnersLuck.Game.State;
 using BeginnersLuck.Game.UI;
@@ -49,6 +50,8 @@ public sealed class GameServices
 
     public WorldState World { get; }
 
+    public SpriteDb Sprites { get; }
+
     public GameServices(
         PixelRenderer pixel,
         SceneManager scenes,
@@ -63,7 +66,8 @@ public sealed class GameServices
         EncounterDirector encounters,
         PlayerState player,
         ItemDb items,
-        WorldState world)
+        WorldState world,
+        SpriteDb sprites)
     {
         Pixel = pixel;
         Scenes = scenes;
@@ -82,5 +86,6 @@ public sealed class GameServices
         Player = player;
         Items = items;
         World = world;
+         Sprites = sprites ?? throw new ArgumentNullException(nameof(sprites));
     }
 }

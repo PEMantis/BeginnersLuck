@@ -13,6 +13,7 @@ using BeginnersLuck.Game.Encounters;
 using System;
 using BeginnersLuck.Game.Items;
 using BeginnersLuck.Game.State;
+using BeginnersLuck.Game.Graphics;
 namespace BeginnersLuck.Game;
 
 public class Game1 : Microsoft.Xna.Framework.Game
@@ -95,7 +96,12 @@ public class Game1 : Microsoft.Xna.Framework.Game
         px.SetData(new[] { Color.White });
 
         var toasts = new BeginnersLuck.Game.UI.ToastQueue();
-
+        var sprites = new BeginnersLuck.Game.Graphics.SpriteDb(_raw);
+        sprites.Register("world.rock", "Sprites/World/rock_32x32.png");
+        sprites.Register("world.tree", "Sprites/World/tree_32x48.png");
+        sprites.Register("world.mountain", "Sprites/World/mountain_64x64.png");
+        sprites.Register("world.ruin_pillar", "Sprites/World/ruin_pillar_32x48.png");
+        sprites.Register("world.player", "Sprites/World/player_16x16.png");
         // your existing: rng, encounterDirector, player, itemDb, raw, font
         _services = new BeginnersLuck.Game.Services.GameServices(
             pixel: _pixel,
@@ -111,7 +117,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
             encounters: encounterDirector,
             player: player,
             items: items,
-            world: world
+            world: world,
+            sprites: sprites
         );
 
         // avoid circular dependency by setting after

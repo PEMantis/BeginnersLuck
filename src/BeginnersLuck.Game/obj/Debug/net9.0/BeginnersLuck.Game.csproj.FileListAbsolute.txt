@@ -41,3 +41,8 @@
 /home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/obj/Debug/net9.0/BeginnersLuck.Game.pdb
 /home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/obj/Debug/net9.0/BeginnersLuck.Game.genruntimeconfig.cache
 /home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/obj/Debug/net9.0/ref/BeginnersLuck.Game.dll
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/bin/Debug/net9.0/ContentRaw/Sprites/World/mountain_64x64.png
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/bin/Debug/net9.0/ContentRaw/Sprites/World/player_16x16.png
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/bin/Debug/net9.0/ContentRaw/Sprites/World/rock_32x32.png
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/bin/Debug/net9.0/ContentRaw/Sprites/World/ruin_pillar_32x48.png
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/bin/Debug/net9.0/ContentRaw/Sprites/World/tree_32x48.png
