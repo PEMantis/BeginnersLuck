@@ -65,12 +65,10 @@ public sealed class WorldMapScene : SceneBase
     private int _debugStarts;
     private double _debugLastRoll;
     private bool _debugTriedThisStep;
-    // ---- World props ----
-    private SpriteAtlas? _worldAtlas;
 
-    // Cache props by chunk so we only generate what's seen
+    // ---- World props overlay (SpriteDb, no atlas) ----
     private readonly Dictionary<Point, List<WorldProp>> _propChunks = new();
-    private const int PropChunkSizeTiles = 32; // 32x32 tiles per prop chunk
+    private const int PropChunkSizeTiles = 32;
 
     public WorldMapScene(GameServices s)
     {
@@ -81,6 +79,8 @@ public sealed class WorldMapScene : SceneBase
     {
         _white = new Texture2D(graphicsDevice, 1, 1);
         _white.SetData(new[] { Color.White });
+
+        _propChunks.Clear();
 
         int seed = _s.World.WorldSeed;
         string worldJson = WorldPaths.WorldJsonPath(seed);
@@ -149,12 +149,6 @@ public sealed class WorldMapScene : SceneBase
         _tileset = new TileSet(tex, tileSize);
         _mapRenderer = new TileMapRenderer(_tileset);
 
-        // Load world prop atlas (runtime, via RawContent)
-        // _worldAtlas = SpriteAtlasLoader.Load(_s.Raw, "Atlases/world_atlas.json");
-
-        // Clear prop cache (regen deterministically as chunks come into view)
-        _propChunks.Clear();
-
         _worldMap = BuildWorldMap(_world);
 
         _playerCell = new Point(w / 2, h / 2);
@@ -162,7 +156,7 @@ public sealed class WorldMapScene : SceneBase
         int minRegion = Math.Max(800, (w * h) / 50);
         int maxR = Math.Max(w, h);
 
-        _playerCell = BeginnersLuck.Game.World.WorldSpawnResolver.FindPlayableSpawn(
+        _playerCell = WorldSpawnResolver.FindPlayableSpawn(
             map: _map!,
             preferred: _playerCell,
             maxSearchRadius: maxR,
@@ -185,7 +179,7 @@ public sealed class WorldMapScene : SceneBase
         _terrainFlat = null;
         _flagsFlat = null;
         _worldMap = null;
-        _worldAtlas = null;
+
         _propChunks.Clear();
     }
 
@@ -310,6 +304,7 @@ public sealed class WorldMapScene : SceneBase
                     _playerCell = next;
                     _debugMoves++;
                     _debugTriedThisStep = true;
+
                     if (_world != null && _terrainFlat != null && _flagsFlat != null)
                     {
                         int idx = _playerCell.X + _playerCell.Y * _world.Width;
@@ -321,6 +316,7 @@ public sealed class WorldMapScene : SceneBase
                     {
                         _lastZone = new ZoneInfo(ZoneId.Grasslands, 0, "plains_low");
                     }
+
                     _lastZone = ZoneResolver.Resolve(_s, _playerCell);
                     _lastEncounterChance = _s.EncounterDirector.ComputeChancePerStep(_lastZone);
 
@@ -331,7 +327,6 @@ public sealed class WorldMapScene : SceneBase
                     {
                         _debugStarts++;
 
-                        // Try to start via the normal flow
                         var debugIntent = _s.EncounterDirector.OnPlayerMoved(_playerCell, _lastZone, _s.Rng);
                         if (debugIntent.HasValue)
                         {
@@ -347,6 +342,7 @@ public sealed class WorldMapScene : SceneBase
                     }
 
                     moved = true;
+
                     // Encounters: only roll when a move actually happened
                     _lastZone = ZoneResolver.Resolve(_s, _playerCell);
                     _lastEncounterChance = _s.EncounterDirector.ComputeChancePerStep(_lastZone);
@@ -379,10 +375,7 @@ public sealed class WorldMapScene : SceneBase
 
             if (intent.HasValue)
             {
-                // EncounterIntent's exact property name might differ in your codebase.
-                // Your EncounterDirector constructs: new EncounterIntent(enc, zone, newCell)
-                // So it almost certainly exposes that EncounterDef as Encounter or Def.
-                var enc = intent.Value.Encounter; // <-- If this doesn't compile, paste EncounterIntent and I'll fix this line.
+                var enc = intent.Value.Encounter;
                 StartEncounterToast(enc, ks, pad);
 
                 _prevKs = ks;
@@ -421,10 +414,9 @@ public sealed class WorldMapScene : SceneBase
                 name: "Debug Slime",
                 enemies: new[]
                 {
-            new EnemyDef("slime", "Slime", 12)
+                    new EnemyDef("slime", "Slime", 12)
                 });
 
-            // Skip toast entirely: go straight to BattleScene so we prove the integration.
             if (!_s.Fade.Active)
             {
                 _s.Fade.Start(0.10f, () =>
@@ -434,7 +426,6 @@ public sealed class WorldMapScene : SceneBase
             }
             else
             {
-                // Even if fade is stuck active, still push so you SEE something.
                 _s.Scenes.Push(new BattleScene(_s, debugEncounter, ks, pad));
             }
 
@@ -442,7 +433,6 @@ public sealed class WorldMapScene : SceneBase
             _prevPad = pad;
             return;
         }
-
 
         // Enter / Generate Local Map (E / A)
         if (Pressed(ks, Keys.E) || Pressed(pad, Buttons.A))
@@ -544,24 +534,11 @@ public sealed class WorldMapScene : SceneBase
 
         _mapRenderer.Draw(sb, _map, view);
 
-        // NEW: props overlay pass
-//        DrawWorldProps(sb, view);
+        // ✅ props overlay
+        DrawWorldProps(sb, view);
 
-        var tl = _map.CellToWorldTopLeft(_playerCell);
-
-        if (_s.Sprites.TryGet("world.player", out var ptex, out var porigin))
-        {
-            // bottom-center of the tile
-            var ppos = new Vector2(tl.X + 16, tl.Y + 32);
-            sb.Draw(ptex, ppos, null, Color.White, 0f, porigin, 1f, SpriteEffects.None, 0f);
-        }
-        else
-        {
-            sb.Draw(_white, new Rectangle((int)tl.X + 2, (int)tl.Y + 2, 12, 12), Color.Gold);
-        }
-
-
-
+        // ✅ player sprite
+        DrawWorldPlayer(sb);
 
         sb.End();
     }
@@ -589,6 +566,7 @@ public sealed class WorldMapScene : SceneBase
                 new Vector2(hud.X + 8, hud.Y + 32),
                 Color.White * 0.75f, 1);
         }
+
         _s.UiFont.Draw(sb,
             $"ZONE: {_lastZone.Id} danger={_lastZone.Danger} table={_lastZone.EncounterTableId} " +
             $"chance={_lastEncounterChance:P0} cd={_s.EncounterDirector.CooldownRemainingSteps}",
@@ -603,6 +581,181 @@ public sealed class WorldMapScene : SceneBase
 
         sb.End();
     }
+
+    // ---------------- Props + Player drawing ----------------
+
+    private void DrawWorldPlayer(SpriteBatch sb)
+    {
+        if (_map == null) return;
+
+        var tl = _map.CellToWorldTopLeft(_playerCell);
+
+        if (_s.Sprites.TryGet("world.player", out var tex, out var origin))
+        {
+            var pos = new Vector2(tl.X + 16, tl.Y + 32); // bottom-center of 32x32 tile
+            sb.Draw(tex, pos, null, Color.White, 0f, origin, 1f, SpriteEffects.None, 0f);
+        }
+        else
+        {
+            sb.Draw(_white!, new Rectangle((int)tl.X + 2, (int)tl.Y + 2, 12, 12), Color.Gold);
+        }
+    }
+
+    private void DrawWorldProps(SpriteBatch sb, Rectangle viewWorldRect)
+    {
+        if (_map == null || _world == null || _terrainFlat == null || _flagsFlat == null)
+            return;
+
+        const int tileSize = 32;
+
+        int minTx = Math.Max(0, viewWorldRect.Left / tileSize);
+        int minTy = Math.Max(0, viewWorldRect.Top / tileSize);
+        int maxTx = Math.Min(_map.Width - 1, viewWorldRect.Right / tileSize + 1);
+        int maxTy = Math.Min(_map.Height - 1, viewWorldRect.Bottom / tileSize + 1);
+
+        int minCx = minTx / PropChunkSizeTiles;
+        int minCy = minTy / PropChunkSizeTiles;
+        int maxCx = maxTx / PropChunkSizeTiles;
+        int maxCy = maxTy / PropChunkSizeTiles;
+
+        for (int cy = minCy; cy <= maxCy; cy++)
+        for (int cx = minCx; cx <= maxCx; cx++)
+        {
+            var key = new Point(cx, cy);
+
+            if (!_propChunks.TryGetValue(key, out var props))
+            {
+                props = GeneratePropChunk(cx, cy);
+                _propChunks[key] = props;
+            }
+
+            for (int i = 0; i < props.Count; i++)
+            {
+                var p = props[i];
+
+                if (p.Tile.X < minTx || p.Tile.X > maxTx || p.Tile.Y < minTy || p.Tile.Y > maxTy)
+                    continue;
+
+                if (!_s.Sprites.TryGet(p.SpriteId, out var tex, out var origin))
+                    continue;
+
+                var tl = _map.CellToWorldTopLeft(p.Tile);
+
+                // sit on ground: bottom-center of tile
+                var pos = new Vector2(tl.X + 16, tl.Y + 32) + Jitter(p.Tile);
+
+                sb.Draw(tex, pos, null, Color.White, 0f, origin, 1f, SpriteEffects.None, 0f);
+            }
+        }
+    }
+
+    private List<WorldProp> GeneratePropChunk(int chunkX, int chunkY)
+    {
+        if (_map == null || _world == null || _terrainFlat == null || _flagsFlat == null)
+            return new List<WorldProp>(0);
+
+        int w = _world.Width;
+        int h = _world.Height;
+
+        int startX = chunkX * PropChunkSizeTiles;
+        int startY = chunkY * PropChunkSizeTiles;
+
+        int endX = Math.Min(startX + PropChunkSizeTiles, w);
+        int endY = Math.Min(startY + PropChunkSizeTiles, h);
+
+        int seed = Hash(_s.World.WorldSeed, chunkX, chunkY);
+        var props = new List<WorldProp>(96);
+
+        for (int y = startY; y < endY; y++)
+        for (int x = startX; x < endX; x++)
+        {
+            // Skip solid world cells
+            if (_map.IsSolidCell(x, y))
+                continue;
+
+            int idx = x + y * w;
+            var tid = (TileId)_terrainFlat[idx];
+            var flags = (TileFlags)_flagsFlat[idx];
+            var zone = ZoneResolver.ResolveFrom(tid, flags);
+
+            int tileSeed = Hash(seed, x, y);
+            var rng = new Random(tileSeed);
+
+            string? sprite = null;
+            bool blocks = false;
+
+            switch (zone.Id)
+            {
+                case ZoneId.Forest:
+                {
+                    int r = rng.Next(100);
+                    if (r < 18) { sprite = "world.tree"; blocks = true; }
+                    else if (r < 23) { sprite = "world.rock"; blocks = false; }
+                    break;
+                }
+
+                case ZoneId.Grasslands:
+                case ZoneId.Plains:
+                {
+                    int r = rng.Next(100);
+                    if (r < 5) { sprite = "world.tree"; blocks = true; }
+                    else if (r < 8) { sprite = "world.rock"; blocks = false; }
+                    break;
+                }
+
+                case ZoneId.Mountains:
+                {
+                    int r = rng.Next(100);
+                    if (r < 14) { sprite = "world.mountain"; blocks = true; }
+                    else if (r < 22) { sprite = "world.rock"; blocks = true; }
+                    break;
+                }
+
+                case ZoneId.Ruins:
+                {
+                    int r = rng.Next(100);
+                    if (r < 10) { sprite = "world.ruin_pillar"; blocks = true; }
+                    else if (r < 14) { sprite = "world.rock"; blocks = false; }
+                    break;
+                }
+
+                default:
+                    break;
+            }
+
+            if (sprite != null)
+                props.Add(new WorldProp(sprite, new Point(x, y), blocks));
+        }
+
+        // draw back-to-front
+        props.Sort((a, b) => a.Tile.Y.CompareTo(b.Tile.Y));
+        return props;
+    }
+
+    private static Vector2 Jitter(Point tile)
+    {
+        // subtle deterministic jitter: -1..+1 px
+        int h = Hash(1337, tile.X, tile.Y);
+        int jx = (h & 0x3) - 1;
+        int jy = ((h >> 2) & 0x3) - 1;
+        return new Vector2(jx, jy);
+    }
+
+    private static int Hash(int a, int b, int c)
+    {
+        unchecked
+        {
+            int h = a;
+            h = h * 31 + b;
+            h = h * 31 + c;
+            h ^= (h << 13);
+            h ^= (h >> 17);
+            h ^= (h << 5);
+            return h;
+        }
+    }
+
+    // ---------------- Existing helpers ----------------
 
     private static BeginnersLuck.WorldGen.WorldMap BuildWorldMap(WorldDto dto)
     {
@@ -625,10 +778,10 @@ public sealed class WorldMapScene : SceneBase
             for (int i = 0; i < n; i++)
             {
                 c.Terrain[i] = (TileId)ch.Terrain[i];
-                c.Flags[i]   = (TileFlags)ch.Flags[i];
-                c.Biome[i]   = (BiomeId)ch.Biome[i];
+                c.Flags[i] = (TileFlags)ch.Flags[i];
+                c.Biome[i] = (BiomeId)ch.Biome[i];
 
-                c.Region[i]    = (ushort)ch.Region[i];
+                c.Region[i] = (ushort)ch.Region[i];
                 c.SubRegion[i] = (ushort)ch.SubRegion[i];
             }
 
@@ -655,190 +808,6 @@ public sealed class WorldMapScene : SceneBase
         Dir.West => Dir.East,
         _ => Dir.North
     };
-
-private void DrawWorldProps(SpriteBatch sb, Rectangle viewWorldRect)
-{
-    if (_map == null || _worldAtlas == null || _world == null || _terrainFlat == null || _flagsFlat == null)
-        return;
-
-    const int tileSize = 32;
-
-    // Convert view rectangle (world pixels) into tile bounds
-    int minTx = Math.Max(0, viewWorldRect.Left / tileSize);
-    int minTy = Math.Max(0, viewWorldRect.Top / tileSize);
-    int maxTx = Math.Min(_map.Width - 1, viewWorldRect.Right / tileSize + 1);
-    int maxTy = Math.Min(_map.Height - 1, viewWorldRect.Bottom / tileSize + 1);
-
-    // Determine which prop chunks are visible
-    int minCx = minTx / PropChunkSizeTiles;
-    int minCy = minTy / PropChunkSizeTiles;
-    int maxCx = maxTx / PropChunkSizeTiles;
-    int maxCy = maxTy / PropChunkSizeTiles;
-
-    for (int cy = minCy; cy <= maxCy; cy++)
-    for (int cx = minCx; cx <= maxCx; cx++)
-    {
-        var key = new Point(cx, cy);
-
-        if (!_propChunks.TryGetValue(key, out var props))
-        {
-            props = GeneratePropChunk(cx, cy);
-            _propChunks[key] = props;
-        }
-
-        // Draw props
-        for (int i = 0; i < props.Count; i++)
-        {
-            var p = props[i];
-
-            // Skip if offscreen at tile granularity (cheap)
-            if ((uint)p.Tile.X < (uint)minTx || p.Tile.X > maxTx ||
-                (uint)p.Tile.Y < (uint)minTy || p.Tile.Y > maxTy)
-                continue;
-
-            if (!_worldAtlas.TryGet(p.SpriteId, out var spr))
-                continue;
-
-            // Place at bottom-center of tile so trees "sit" on ground
-            var tl = _map.CellToWorldTopLeft(p.Tile);
-            var basePos = new Vector2(tl.X + tileSize * 0.5f, tl.Y + tileSize);
-
-            // Optional: slight variation to avoid perfect grid look
-            // (Deterministic, based on tile position)
-            var jitter = Jitter(p.Tile);
-            var pos = basePos + jitter;
-
-            // Layering: approximate draw order by y so closer props render on top
-            // Not using SpriteBatch sort here, so we keep it simple:
-            // Larger y naturally drawn later if we iterate chunks top->bottom, but within chunk we didn't sort.
-            // We'll do a minimal stable y-sort per chunk in GeneratePropChunk.
-            sb.Draw(
-                spr.Texture,
-                position: pos,
-                sourceRectangle: spr.Src,
-                color: Color.White,
-                rotation: 0f,
-                origin: spr.Origin,
-                scale: 1f,
-                effects: SpriteEffects.None,
-                layerDepth: 0f);
-        }
-    }
-}
-
-    private List<WorldProp> GeneratePropChunk(int chunkX, int chunkY)
-    {
-        if (_map == null || _world == null || _terrainFlat == null || _flagsFlat == null)
-            return new List<WorldProp>(0);
-
-        int w = _world.Width;
-        int h = _world.Height;
-
-        int startX = chunkX * PropChunkSizeTiles;
-        int startY = chunkY * PropChunkSizeTiles;
-
-        int endX = Math.Min(startX + PropChunkSizeTiles, w);
-        int endY = Math.Min(startY + PropChunkSizeTiles, h);
-
-        // Seed per prop chunk so generation is deterministic but independent
-        int seed = Hash(_s.World.WorldSeed, chunkX, chunkY);
-        var props = new List<WorldProp>(64);
-
-        for (int y = startY; y < endY; y++)
-            for (int x = startX; x < endX; x++)
-            {
-                // Avoid props on solid tiles so player isn't standing inside trees for now
-                if (_map.IsSolidCell(x, y))
-                    continue;
-
-                // Deterministic per tile
-                int tileSeed = Hash(seed, x, y);
-                var rng = new Random(tileSeed);
-
-                int idx = x + y * w;
-                var tid = (TileId)_terrainFlat[idx];
-                var flags = (TileFlags)_flagsFlat[idx];
-                var zone = ZoneResolver.ResolveFrom(tid, flags);
-
-                // If you want props to respect roads/coasts later, use flags here.
-
-                string? sprite = null;
-                bool blocks = false;
-
-                switch (zone.Id)
-                {
-                    case ZoneId.Forest:
-                        {
-                            // lots of trees, occasional rocks
-                            int r = rng.Next(100);
-                            if (r < 18) { sprite = (rng.Next(100) < 50) ? "tree_oak" : "tree_pine"; blocks = true; }
-                            else if (r < 22) { sprite = "rock"; blocks = false; }
-                            break;
-                        }
-
-                    case ZoneId.Grasslands:
-                    case ZoneId.Plains:
-                        {
-                            // sparse trees and rocks
-                            int r = rng.Next(100);
-                            if (r < 5) { sprite = "tree_pine"; blocks = true; }
-                            else if (r < 8) { sprite = "rock"; blocks = false; }
-                            break;
-                        }
-
-                    case ZoneId.Mountains:
-                        {
-                            // peaks + rocks
-                            int r = rng.Next(100);
-                            if (r < 14) { sprite = "mountain_peak"; blocks = true; }
-                            else if (r < 22) { sprite = "rock"; blocks = true; }
-                            break;
-                        }
-
-                    case ZoneId.Ruins:
-                        {
-                            int r = rng.Next(100);
-                            if (r < 10) { sprite = "ruin_pillar"; blocks = true; }
-                            else if (r < 16) { sprite = "ruin_rubble"; blocks = false; }
-                            break;
-                        }
-
-                    default:
-                        break;
-                }
-
-                if (sprite != null)
-                    props.Add(new WorldProp(sprite, new Point(x, y), blocks));
-            }
-
-        // Sort by tile Y so lower things render later (in front)
-        props.Sort((a, b) => a.Tile.Y.CompareTo(b.Tile.Y));
-        return props;
-    }
-
-    private static Vector2 Jitter(Point tile)
-    {
-        // Very small deterministic jitter. Keep it subtle so it still feels grid-aligned.
-        int h = Hash(1337, tile.X, tile.Y);
-        // -1..+1 pixels
-        int jx = (h & 0x3) - 1;
-        int jy = ((h >> 2) & 0x3) - 1;
-        return new Vector2(jx, jy);
-    }
-
-    private static int Hash(int a, int b, int c)
-    {
-        unchecked
-        {
-            int h = a;
-            h = h * 31 + b;
-            h = h * 31 + c;
-            h ^= (h << 13);
-            h ^= (h >> 17);
-            h ^= (h << 5);
-            return h;
-        }
-    }
 
     private bool Pressed(KeyboardState ks, Keys k) => ks.IsKeyDown(k) && !_prevKs.IsKeyDown(k);
     private bool Pressed(GamePadState pad, Buttons b) => pad.IsButtonDown(b) && !_prevPad.IsButtonDown(b);
