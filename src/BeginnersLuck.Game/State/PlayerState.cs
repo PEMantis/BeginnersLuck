@@ -1,4 +1,5 @@
 using System;
+using BeginnersLuck.Game.Services;
 
 namespace BeginnersLuck.Game.State;
 
@@ -138,5 +139,12 @@ public sealed class PlayerState
         MaxHp += 5;
         Hp = MaxHp;
     }
-    
+    public PlayerXpReport AddXpWithReport(int xp)
+    {
+        int oldLevel = Level; // whatever your level property is
+        AddXp(xp);            // your existing method
+        return new PlayerXpReport { OldLevel = oldLevel, NewLevel = Level };
+    }
+
+
 }

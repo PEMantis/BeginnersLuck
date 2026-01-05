@@ -16,16 +16,18 @@ namespace BeginnersLuck.Game.Scenes;
 
 public sealed class BattleScene : SceneBase
 {
-    private enum Phase
-    {
-        Intro,
-        PlayerSelect,
-        PlayerResolve,
-        EnemyResolve,
-        Victory,
-        Defeat,
-        Exit
-    }
+
+private enum Phase
+{
+    Intro,
+    PlayerSelect,
+    PlayerResolve,
+    EnemyResolve,
+    VictorySummary,
+    Defeat,
+    Exit
+}
+
 
     private sealed class Enemy
     {
@@ -88,6 +90,15 @@ public sealed class BattleScene : SceneBase
     private Rectangle _btnAttack;
     private Rectangle _btnRun;
 
+    private enum ExitReason { None, Fled, Victory, Defeat }
+
+    private ExitReason _exitReason = ExitReason.None;
+
+    // Victory summary UI state
+    private int _lootScroll;              // index offset for loot list
+    private float _payoutT;               // anim timer for “counting up” feel (optional)
+    private PlayerXpReport? _xpReport;    // level-up info captured when applying XP
+
     public BattleScene(GameServices s, EncounterDef encounter, KeyboardState seedKs, GamePadState seedPad)
     {
         _s = s ?? throw new ArgumentNullException(nameof(s));
@@ -121,6 +132,10 @@ public sealed class BattleScene : SceneBase
 
         _victoryEntered = false;
         _eatFirstUpdate = true;
+        _exitReason = ExitReason.None;
+        _lootScroll = 0;
+        _payoutT = 0f;
+        _xpReport = null;
 
         ComputeLayout();
     }
@@ -186,7 +201,7 @@ public sealed class BattleScene : SceneBase
                 var target = FirstLivingEnemy();
                 if (target == null)
                 {
-                    GoTo(Phase.Victory);
+                    GoTo(Phase.VictorySummary);
                     break;
                 }
 
@@ -196,7 +211,7 @@ public sealed class BattleScene : SceneBase
                 _message = $"YOU HIT {target.Name.ToUpperInvariant()} FOR {dmg}!";
                 _messageT = 0.9f;
 
-                if (AllEnemiesDown()) GoTo(Phase.Victory);
+                if (AllEnemiesDown()) GoTo(Phase.VictorySummary);
                 else GoTo(Phase.EnemyResolve);
 
                 break;
@@ -209,7 +224,7 @@ public sealed class BattleScene : SceneBase
                 var attacker = FirstLivingEnemy();
                 if (attacker == null)
                 {
-                    GoTo(Phase.Victory);
+                    GoTo(Phase.VictorySummary);
                     break;
                 }
 
@@ -223,26 +238,29 @@ public sealed class BattleScene : SceneBase
                 else GoTo(Phase.PlayerSelect);
 
                 break;
-            }
-
-            case Phase.Victory:
-            {
-                RollRewardsIfNeeded();
-                ApplyRewardsIfNeeded();
-
-                if (!_victoryEntered)
-                {
-                    _victoryEntered = true;
-                    _message = "VICTORY!";
-                    _messageT = 999f;
                 }
 
-                if (PressedConfirm(ks, pad))
-                    GoTo(Phase.Exit);
+            case Phase.VictorySummary:
+                {
+                    // One-time roll + apply
+                    RollRewardsIfNeeded();
+                    ApplyRewardsIfNeeded();
 
-                break;
-            }
+                    _exitReason = ExitReason.Victory;
 
+                    // Optional: payout “count-up” timer, purely visual
+                    _payoutT += dt;
+
+                    // Basic scrolling for loot list (works even if you later add a scrollbar)
+                    if (PressedUp(ks, pad)) _lootScroll = Math.Max(0, _lootScroll - 1);
+                    if (PressedDown(ks, pad)) _lootScroll = Math.Min(Math.Max(0, _rewardLoot.Count - 1), _lootScroll + 1);
+
+                    // Confirm to leave
+                    if (PressedConfirm(ks, pad))
+                        GoTo(Phase.Exit);
+
+                    break;
+                }
             case Phase.Defeat:
             {
                 if (_messageT <= 0f)
@@ -254,25 +272,29 @@ public sealed class BattleScene : SceneBase
                 if (PressedConfirm(ks, pad))
                     GoTo(Phase.Exit);
 
-                break;
-            }
+                    break;
+                }
 
             case Phase.Exit:
-            {
-                if (_phaseT >= 0.15f && PressedConfirm(ks, pad))
                 {
-                    _s.Scenes.Pop();
-                    return;
-                }
+                    // Give a tiny grace period so accidental double-press doesn’t insta-pop
+                    if (_phaseT >= 0.20f && PressedConfirm(ks, pad))
+                    {
+                        _s.Scenes.Pop();
+                        return;
+                    }
 
-                if (_phaseT >= 0.65f && (_message.StartsWith("VICTORY") || _message.StartsWith("YOU FLED")))
-                {
-                    _s.Scenes.Pop();
-                    return;
-                }
+                    // Auto-exit after a moment for non-summary reasons (flee/defeat),
+                    // but for victory we generally want the player to confirm.
+                    if (_phaseT >= 0.75f && _exitReason != ExitReason.Victory)
+                    {
+                        _s.Scenes.Pop();
+                        return;
+                    }
 
-                break;
-            }
+                    break;
+
+                }
         }
 
         _prevKs = ks;
@@ -336,7 +358,7 @@ public sealed class BattleScene : SceneBase
                 _phase switch
                 {
                     Phase.Intro => "ENTER/A: START",
-                    Phase.Victory => "ENTER/A: CONTINUE",
+                    Phase.VictorySummary => "ENTER/A: CONTINUE",
                     Phase.Defeat => "ENTER/A: CONTINUE",
                     Phase.Exit => "ENTER/A: LEAVE",
                     _ => "ENTER/A: CONTINUE"
@@ -350,7 +372,7 @@ public sealed class BattleScene : SceneBase
                 1);
         }
 
-        if (_phase == Phase.Victory)
+        if (_phase == Phase.VictorySummary)
         {
             DrawVictorySummary(sb);
         }
@@ -508,12 +530,45 @@ public sealed class BattleScene : SceneBase
             return;
         }
 
+        int start = Math.Clamp(_lootScroll, 0, Math.Max(0, _rewardLoot.Count - 1));
+
         int remainingPx = inner.Bottom - y;
         int lh = _s.UiFont.LineHeight(1);
         int maxLines = Math.Max(1, remainingPx / lh);
 
+        // Show rewards with a tiny “count up” feel (optional)
+        int shownXp = _rewardXp;
+        int shownGold = _rewardGold;
+
+        // If you want a quick count-up: first 0.6s for XP, next 0.6s for gold
+        float xpK = MathHelper.Clamp(_payoutT / 0.6f, 0f, 1f);
+        float goldK = MathHelper.Clamp((_payoutT - 0.6f) / 0.6f, 0f, 1f);
+        shownXp = (int)MathF.Round(_rewardXp * xpK);
+        shownGold = (int)MathF.Round(_rewardGold * goldK);
+
+        Line($"XP:   +{shownXp}", 0.85f);
+        Line($"GOLD: +{shownGold}", 0.85f);
+
+        y += 2;
+
+        // Level-up report (if any)
+        if (_xpReport != null && _xpReport.LevelsGained > 0)
+        {
+            Line($"LEVEL UP! +{_xpReport.LevelsGained}", 0.90f);
+            Line($"NOW LEVEL: {_xpReport.NewLevel}", 0.80f);
+            y += 2;
+        }
+
+        Line("LOOT:", 0.75f);
+
+        if (_rewardLoot.Count == 0)
+        {
+            Line("(NONE)", 0.75f);
+            return;
+        }
+
         int shown = 0;
-        for (int i = 0; i < _rewardLoot.Count && shown < maxLines; i++)
+        for (int i = start; i < _rewardLoot.Count && shown < maxLines; i++)
         {
             var (id, qty) = _rewardLoot[i];
             var name = _s.Items.NameOf(id);
@@ -521,10 +576,13 @@ public sealed class BattleScene : SceneBase
             shown++;
         }
 
-        if (_rewardLoot.Count > shown && (inner.Bottom - y) >= lh)
-            Line($"(+{_rewardLoot.Count - shown} MORE)", 0.60f);
-    }
+        if (start > 0 && (inner.Bottom - y) >= lh)
+            Line("(MORE ABOVE)", 0.55f);
 
+        if (start + shown < _rewardLoot.Count && (inner.Bottom - y) >= lh)
+            Line("(MORE BELOW)", 0.55f);
+
+    }
     private void DrawMessage(SpriteBatch sb)
     {
         // Width relative to screen now, centered
@@ -560,8 +618,8 @@ public sealed class BattleScene : SceneBase
         _phase = p;
         _phaseT = 0f;
 
-        if (p != Phase.Victory)
-            _victoryEntered = false;
+        if (p != Phase.VictorySummary)
+            _payoutT = 0f;
     }
 
     private bool AllEnemiesDown()
@@ -649,10 +707,11 @@ public sealed class BattleScene : SceneBase
         if (_rewardsApplied) return;
         _rewardsApplied = true;
 
-        _s.Player.AddXp(_rewardXp);
+        _xpReport = _s.Player.AddXpWithReport(_rewardXp);
         _s.Player.AddGold(_rewardGold);
 
         foreach (var (id, qty) in _rewardLoot)
             _s.Player.Inventory.Add(id, qty);
     }
+
 }
