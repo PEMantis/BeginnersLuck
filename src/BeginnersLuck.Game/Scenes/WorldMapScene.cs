@@ -66,9 +66,16 @@ public sealed class WorldMapScene : SceneBase
     private double _debugLastRoll;
     private bool _debugTriedThisStep;
 
-    // ---- World props overlay (SpriteDb, no atlas) ----
+    // ---- Props overlay (SpriteDb, no atlas) ----
     private readonly Dictionary<Point, List<WorldProp>> _propChunks = new();
+    private readonly HashSet<Point> _propBlocked = new(); // collision set (tile coords)
     private const int PropChunkSizeTiles = 32;
+
+    // ---- POIs overlay ----
+    private readonly Dictionary<Point, List<WorldPoi>> _poiChunks = new();
+    private readonly Dictionary<Point, WorldPoi> _poiByTile = new(); // fast lookup for enter/interact
+    private const int PoiChunkSizeTiles = 32;
+    private Texture2D? _sprRock, _sprTree, _sprMountain, _sprRuin, _sprPlayer;
 
     public WorldMapScene(GameServices s)
     {
@@ -81,6 +88,9 @@ public sealed class WorldMapScene : SceneBase
         _white.SetData(new[] { Color.White });
 
         _propChunks.Clear();
+        _propBlocked.Clear();
+        _poiChunks.Clear();
+        _poiByTile.Clear();
 
         int seed = _s.World.WorldSeed;
         string worldJson = WorldPaths.WorldJsonPath(seed);
@@ -122,28 +132,34 @@ public sealed class WorldMapScene : SceneBase
 
                 _terrainFlat[i] = (byte)ch.Terrain[local];
                 _flagsFlat[i] = (ushort)ch.Flags[local];
-            }
+                }
         }
+
+        // After flattening arrays (terrainFlat + flagsFlat) and before building TileMap:
+        WorldPoiPass.Apply(w, h, _terrainFlat!, _flagsFlat!, _s.Rng);
 
         const int tileSize = 32;
         _map = new TileMap(w, h, tileSize, new int[w * h]);
 
         for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++)
-        {
-            int i = x + y * w;
-            var tid = (TileId)_terrainFlat[i];
-            var flags = (TileFlags)_flagsFlat[i];
+            for (int x = 0; x < w; x++)
+            {
+                int i = x + y * w;
+                var tid = (TileId)_terrainFlat[i];
+                var flags = (TileFlags)_flagsFlat[i];
 
-            _map.Tiles[i] = WorldTilePalette.ToTileIndex(tid);
+                _map.Tiles[i] = WorldTilePalette.ToTileIndex(tid);
 
-            bool solid =
-                WorldTilePalette.IsSolid(tid) ||
-                (flags & TileFlags.Coast) != 0 ||
-                (flags & TileFlags.Cliff) != 0;
+                bool solid =
+          WorldTilePalette.IsSolid(tid) ||
+          (flags & TileFlags.Coast) != 0 ||
+          (flags & TileFlags.Cliff) != 0 ||
+          (flags & TileFlags.River) != 0 ||        // only if your rivers are meant to block
+          (flags & TileFlags.Ruins) != 0;          // NEW: pillars block
 
-            _map.SetSolidCell(x, y, solid);
-        }
+
+                _map.SetSolidCell(x, y, solid);
+            }
 
         var tex = _s.Raw.LoadTexture("Textures/tiles.png");
         _tileset = new TileSet(tex, tileSize);
@@ -163,6 +179,10 @@ public sealed class WorldMapScene : SceneBase
             minRegionSize: minRegion,
             requireTouchesEdge: true);
 
+        // Ensure POIs generated near spawn so you immediately see something
+        EnsurePoiChunkForCell(_playerCell);
+        EnsurePropChunkForCell(_playerCell);
+
         _cam.Position = _map.CellToWorldCenter(_playerCell);
     }
 
@@ -181,13 +201,15 @@ public sealed class WorldMapScene : SceneBase
         _worldMap = null;
 
         _propChunks.Clear();
+        _propBlocked.Clear();
+        _poiChunks.Clear();
+        _poiByTile.Clear();
     }
 
     public override void Update(UpdateContext uc)
     {
         if (_map == null) return;
 
-        // If we just popped back from local, consume the pending exit once.
         ConsumePendingLocalExit();
 
         var ks = Keyboard.GetState();
@@ -234,48 +256,6 @@ public sealed class WorldMapScene : SceneBase
             return;
         }
 
-        // DEV: force-enter Town local at current world tile (F8 / LeftStick)
-        if (Pressed(ks, Keys.F8) || Pressed(pad, Buttons.LeftStick))
-        {
-            if (_world == null || _worldMap == null)
-            {
-                _s.Toasts.Push("World not loaded.", 1.0f);
-                _prevKs = ks; _prevPad = pad;
-                return;
-            }
-
-            int seed = _s.World.WorldSeed;
-            int wx = _playerCell.X;
-            int wy = _playerCell.Y;
-
-            var purpose = LocalMapPurpose.Town;
-
-            // delete cached local so it regenerates with Town purpose
-            string localBin = WorldPaths.LocalBin(seed, wx, wy);
-            if (File.Exists(localBin))
-                File.Delete(localBin);
-
-            localBin = LocalMapCache.EnsureLocalExists(
-                world: _worldMap!,
-                worldSeed: seed,
-                wx: wx,
-                wy: wy,
-                localSize: 128,
-                purpose: purpose
-            );
-
-            var spawn = new SpawnRequest(SpawnIntent.EnterFromRoad, IncomingDir: Opposite(_lastWorldMoveDir));
-
-            _s.Toasts.Push($"DEV Town @ {wx},{wy}", 0.8f);
-
-            if (!_s.Fade.Active)
-                _s.Fade.Start(0.25f, () => _s.Scenes.Push(new LocalMapScene(_s, localBin, purpose, spawn)));
-
-            _prevKs = ks;
-            _prevPad = pad;
-            return;
-        }
-
         // Movement (edge-triggered)
         Point dir = Point.Zero;
 
@@ -297,25 +277,19 @@ public sealed class WorldMapScene : SceneBase
         if (dir != Point.Zero)
         {
             var next = _playerCell + dir;
+
             if ((uint)next.X < (uint)_map.Width && (uint)next.Y < (uint)_map.Height)
             {
-                if (!_map.IsSolidCell(next.X, next.Y))
+                // Ensure collision data exists for this region
+                EnsurePropChunkForCell(next);
+                EnsurePoiChunkForCell(next);
+
+                if (!IsBlocked(next))
                 {
                     _playerCell = next;
+                    moved = true;
                     _debugMoves++;
                     _debugTriedThisStep = true;
-
-                    if (_world != null && _terrainFlat != null && _flagsFlat != null)
-                    {
-                        int idx = _playerCell.X + _playerCell.Y * _world.Width;
-                        var tid = (TileId)_terrainFlat[idx];
-                        var flags = (TileFlags)_flagsFlat[idx];
-                        _lastZone = ZoneResolver.ResolveFrom(tid, flags);
-                    }
-                    else
-                    {
-                        _lastZone = new ZoneInfo(ZoneId.Grasslands, 0, "plains_low");
-                    }
 
                     _lastZone = ZoneResolver.Resolve(_s, _playerCell);
                     _lastEncounterChance = _s.EncounterDirector.ComputeChancePerStep(_lastZone);
@@ -323,30 +297,7 @@ public sealed class WorldMapScene : SceneBase
                     _debugRolls++;
                     _debugLastRoll = _s.Rng.NextDouble();
 
-                    if (_debugLastRoll <= _lastEncounterChance)
-                    {
-                        _debugStarts++;
-
-                        var debugIntent = _s.EncounterDirector.OnPlayerMoved(_playerCell, _lastZone, _s.Rng);
-                        if (debugIntent.HasValue)
-                        {
-                            StartEncounterToast(debugIntent.Value.Encounter, ks, pad);
-                            _prevKs = ks;
-                            _prevPad = pad;
-                            return;
-                        }
-                        else
-                        {
-                            _s.Toasts.Push("Hit chance but intent was null (source returned empty?)", 1.2f);
-                        }
-                    }
-
-                    moved = true;
-
                     // Encounters: only roll when a move actually happened
-                    _lastZone = ZoneResolver.Resolve(_s, _playerCell);
-                    _lastEncounterChance = _s.EncounterDirector.ComputeChancePerStep(_lastZone);
-
                     var intent = _s.EncounterDirector.OnPlayerMoved(_playerCell, _lastZone, _s.Rng);
                     if (intent.HasValue)
                     {
@@ -363,78 +314,16 @@ public sealed class WorldMapScene : SceneBase
                     else if (dir.Y == -1) _lastWorldMoveDir = Dir.North;
                 }
                 else
-                    _s.Toasts.Push("Blocked.", 0.35f);
-            }
-        }
-
-        // ✅ Step 3: Encounter roll AFTER a successful move
-        if (moved)
-        {
-            var zone = ZoneResolver.Resolve(_s, _playerCell);
-            var intent = _s.EncounterDirector.OnPlayerMoved(_playerCell, zone, _s.Rng);
-
-            if (intent.HasValue)
-            {
-                var enc = intent.Value.Encounter;
-                StartEncounterToast(enc, ks, pad);
-
-                _prevKs = ks;
-                _prevPad = pad;
-                return;
-            }
-        }
-
-        // DEV: jump into known-good local map (F9 / RightStick)
-        if (Pressed(ks, Keys.F9) || Pressed(pad, Buttons.RightStick))
-        {
-            int seed = _s.World.WorldSeed;
-            int wx = 262;
-            int wy = 20;
-            var purpose = LocalMapPurpose.Town;
-
-            string localBin = WorldPaths.LocalBin(seed, wx, wy);
-            var spawn = new SpawnRequest(SpawnIntent.EnterFromRoad, IncomingDir: Opposite(_lastWorldMoveDir));
-
-            if (!File.Exists(localBin))
-                _s.Toasts.Push($"Missing: {localBin}", 1.4f);
-            else if (!_s.Fade.Active)
-                _s.Fade.Start(0.25f, () => _s.Scenes.Push(new LocalMapScene(_s, localBin, purpose, spawn)));
-
-            _prevKs = ks;
-            _prevPad = pad;
-            return;
-        }
-
-        // DEV: Force battle immediately (bypasses EncounterDirector/IEncounterSource)
-        // F7 / RightShoulder
-        if (Pressed(ks, Keys.F7) || Pressed(pad, Buttons.RightShoulder))
-        {
-            var debugEncounter = new EncounterDef(
-                id: "debug_slime",
-                name: "Debug Slime",
-                enemies: new[]
                 {
-                    new EnemyDef("slime", "Slime", 12)
-                });
-
-            if (!_s.Fade.Active)
-            {
-                _s.Fade.Start(0.10f, () =>
-                {
-                    _s.Scenes.Push(new BattleScene(_s, debugEncounter, ks, pad));
-                });
+                    // If it's a POI tile, allow standing adjacent and "enter" with E/A.
+                    // Block message only if not a POI.
+                    if (!TryGetPoiAt(next, out _))
+                        _s.Toasts.Push("Blocked.", 0.35f);
+                }
             }
-            else
-            {
-                _s.Scenes.Push(new BattleScene(_s, debugEncounter, ks, pad));
-            }
-
-            _prevKs = ks;
-            _prevPad = pad;
-            return;
         }
 
-        // Enter / Generate Local Map (E / A)
+        // Enter / Interact (E / A)
         if (Pressed(ks, Keys.E) || Pressed(pad, Buttons.A))
         {
             if (_world == null || _flagsFlat == null || _worldMap == null)
@@ -444,6 +333,17 @@ public sealed class WorldMapScene : SceneBase
                 return;
             }
 
+            // If standing on a POI tile, override purpose based on POI
+            if (TryGetPoiAt(_playerCell, out var poi))
+            {
+                TryEnterPoi(poi, ks, pad);
+
+                _prevKs = ks;
+                _prevPad = pad;
+                return;
+            }
+
+            // Otherwise, use normal purpose from flags
             int wx = _playerCell.X;
             int wy = _playerCell.Y;
 
@@ -476,6 +376,10 @@ public sealed class WorldMapScene : SceneBase
 
         _cam.Position = _map.CellToWorldCenter(_playerCell);
 
+        // Ensure visible area caches are ready (nice for immediate draw)
+        EnsurePropChunkForCell(_playerCell);
+        EnsurePoiChunkForCell(_playerCell);
+
         _prevKs = ks;
         _prevPad = pad;
     }
@@ -502,7 +406,10 @@ public sealed class WorldMapScene : SceneBase
 
         if (_map != null)
         {
-            if ((uint)dest.X >= (uint)_map.Width || (uint)dest.Y >= (uint)_map.Height || _map.IsSolidCell(dest.X, dest.Y))
+            EnsurePropChunkForCell(dest);
+            EnsurePoiChunkForCell(dest);
+
+            if ((uint)dest.X >= (uint)_map.Width || (uint)dest.Y >= (uint)_map.Height || IsBlocked(dest))
                 dest = from;
         }
 
@@ -534,10 +441,16 @@ public sealed class WorldMapScene : SceneBase
 
         _mapRenderer.Draw(sb, _map, view);
 
-        // ✅ props overlay
+        // Draw POI overlays in a small radius around player for perf
+        DrawWorldOverlays(sb, view);
+
+        // props first (behind POI markers)
         DrawWorldProps(sb, view);
 
-        // ✅ player sprite
+        // POIs next so they stand out over props
+        DrawWorldPois(sb, view);
+
+        // player last
         DrawWorldPlayer(sb);
 
         sb.End();
@@ -550,7 +463,7 @@ public sealed class WorldMapScene : SceneBase
         var sb = rc.SpriteBatch;
         sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
 
-        var hud = new Rectangle(8, 8, 260, 52);
+        var hud = new Rectangle(8, 8, 300, 64);
         sb.Draw(_white, hud, new Color(10, 10, 18) * 0.75f);
 
         _s.UiFont.Draw(sb, $"GOLD: {_s.Player.Gold}", new Vector2(hud.X + 8, hud.Y + 8), Color.White * 0.9f, 1);
@@ -560,29 +473,185 @@ public sealed class WorldMapScene : SceneBase
         {
             int idx = _playerCell.X + _playerCell.Y * _world.Width;
             var tid = (TileId)_terrainFlat[idx];
+            bool propBlocked = _propBlocked.Contains(_playerCell);
+            bool onPoi = _poiByTile.ContainsKey(_playerCell);
 
             _s.UiFont.Draw(sb,
-                $"WORLD: {_playerCell.X},{_playerCell.Y}  {tid}  {_flagsFlat[idx]}  solid={_map.IsSolidCell(_playerCell.X, _playerCell.Y)}",
+                $"WORLD: {_playerCell.X},{_playerCell.Y} {tid} flags={_flagsFlat[idx]} solid={_map.IsSolidCell(_playerCell.X,_playerCell.Y)} propBlock={propBlocked} poi={onPoi}",
                 new Vector2(hud.X + 8, hud.Y + 32),
                 Color.White * 0.75f, 1);
         }
 
         _s.UiFont.Draw(sb,
-            $"ZONE: {_lastZone.Id} danger={_lastZone.Danger} table={_lastZone.EncounterTableId} " +
-            $"chance={_lastEncounterChance:P0} cd={_s.EncounterDirector.CooldownRemainingSteps}",
+            $"ZONE: {_lastZone.Id} danger={_lastZone.Danger} table={_lastZone.EncounterTableId} chance={_lastEncounterChance:P0}",
             new Vector2(hud.X + 8, hud.Y + 44),
-            Color.White * 0.7f, 1);
-
-        _s.UiFont.Draw(sb,
-            $"DBG: moves={_debugMoves} rolls={_debugRolls} starts={_debugStarts} " +
-            $"lastRoll={_debugLastRoll:0.000} tried={_debugTriedThisStep} fade={_s.Fade.Active} toast={_toastActive}",
-            new Vector2(hud.X + 8, hud.Y + 56),
             Color.White * 0.7f, 1);
 
         sb.End();
     }
 
-    // ---------------- Props + Player drawing ----------------
+    // ---------------- POI / Enter logic ----------------
+
+    private bool TryGetPoiAt(Point tile, out WorldPoi poi)
+        => _poiByTile.TryGetValue(tile, out poi);
+
+    private void TryEnterPoi(WorldPoi poi, KeyboardState ks, GamePadState pad)
+    {
+        if (_world == null || _worldMap == null)
+        {
+            _s.Toasts.Push("World not loaded.", 1.0f);
+            return;
+        }
+
+        int seed = _s.World.WorldSeed;
+        int wx = poi.Tile.X;
+        int wy = poi.Tile.Y;
+
+        // Pick a purpose. 
+        LocalMapPurpose purpose = poi.Kind switch
+        {
+            PoiKind.Town => LocalMapPurpose.Town,
+            PoiKind.Ruin => LocalMapPurpose.Ruins,
+            PoiKind.MountainPass => LocalMapPurpose.Road,
+            _ => LocalMapPurpose.Town
+        };
+
+
+        // Optional: wipe cache so POIs regenerate their local with distinct vibe
+        // (Comment out if you prefer persistence)
+        string localBin = WorldPaths.LocalBin(seed, wx, wy);
+        // if (File.Exists(localBin)) File.Delete(localBin);
+
+        localBin = LocalMapCache.EnsureLocalExists(
+            world: _worldMap!,
+            worldSeed: seed,
+            wx: wx,
+            wy: wy,
+            localSize: 128,
+            purpose: purpose
+        );
+
+        var spawn = new SpawnRequest(SpawnIntent.EnterFromRoad, IncomingDir: Opposite(_lastWorldMoveDir));
+
+        _s.Toasts.Push($"ENTER: {poi.Name}", 0.8f);
+
+        if (!_s.Fade.Active)
+            _s.Fade.Start(0.25f, () => _s.Scenes.Push(new LocalMapScene(_s, localBin, purpose, spawn)));
+    }
+
+    private void DrawWorldOverlays(SpriteBatch sb, Rectangle view)
+    {
+        if (_map == null || _world == null || _terrainFlat == null || _flagsFlat == null) return;
+
+        int w = _world.Width;
+        int h = _world.Height;
+
+        // Convert view rect (world px) into cell bounds
+        var topLeft = _map.WorldToCell(new Vector2(view.Left, view.Top));
+        var botRight = _map.WorldToCell(new Vector2(view.Right, view.Bottom));
+
+        int x0 = Math.Clamp(topLeft.X - 2, 0, w - 1);
+        int y0 = Math.Clamp(topLeft.Y - 2, 0, h - 1);
+        int x1 = Math.Clamp(botRight.X + 2, 0, w - 1);
+        int y1 = Math.Clamp(botRight.Y + 2, 0, h - 1);
+
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+            {
+                int i = x + y * w;
+                var tid = (TileId)_terrainFlat[i];
+                var f = (TileFlags)_flagsFlat[i];
+
+                // World position
+                var cellTopLeft = _map.CellToWorldTopLeft(new Point(x, y));
+
+                // Example decorations by terrain
+                // (You can tune these rules later)
+                if (tid == TileId.Mountain && _sprMountain != null)
+                {
+                    sb.Draw(_sprMountain, new Vector2(cellTopLeft.X - 16, cellTopLeft.Y - 32), Color.White);
+                }
+                else if ((f & TileFlags.Ruins) != 0 && _sprRuin != null)
+                {
+                    sb.Draw(_sprRuin, new Vector2(cellTopLeft.X, cellTopLeft.Y - 16), Color.White);
+                }
+                else if (tid == TileId.Forest && _sprTree != null)
+                {
+                    // scatter every other tile for readability
+                    if (((x ^ y) & 1) == 0)
+                        sb.Draw(_sprTree, new Vector2(cellTopLeft.X, cellTopLeft.Y - 16), Color.White);
+                }
+                else if (tid == TileId.Ruins && _sprRock != null) // if you have no TileId.Ruins, remove this branch
+                {
+                    sb.Draw(_sprRock, new Vector2(cellTopLeft.X, cellTopLeft.Y), Color.White);
+                }
+
+                // Optional: road overlay (for now just tint the base tile, or later draw a road sprite)
+                // If you later add a road sprite, draw it here.
+            }
+
+        // Draw player sprite on top
+        if (_sprPlayer != null)
+        {
+            var p = _map.CellToWorldTopLeft(_playerCell);
+            sb.Draw(_sprPlayer, new Vector2(p.X + 8, p.Y + 8), Color.White);
+        }
+    }
+
+
+    // ---------------- Collision ----------------
+
+    private bool IsBlocked(Point cell)
+    {
+        if (_map == null) return true;
+
+        // POI tiles are enterable even if props would otherwise block
+        if (_poiByTile.ContainsKey(cell))
+            return false;
+
+        if (_map.IsSolidCell(cell.X, cell.Y))
+            return true;
+
+        return _propBlocked.Contains(cell);
+    }
+
+    private void EnsurePropChunkForCell(Point cell)
+    {
+        int cx = cell.X / PropChunkSizeTiles;
+        int cy = cell.Y / PropChunkSizeTiles;
+        var key = new Point(cx, cy);
+
+        if (_propChunks.ContainsKey(key))
+            return;
+
+        var props = GeneratePropChunk(cx, cy);
+        _propChunks[key] = props;
+
+        // Add blocking props to collision set
+        for (int i = 0; i < props.Count; i++)
+        {
+            if (props[i].BlocksMove)
+                _propBlocked.Add(props[i].Tile);
+        }
+    }
+
+    private void EnsurePoiChunkForCell(Point cell)
+    {
+        int cx = cell.X / PoiChunkSizeTiles;
+        int cy = cell.Y / PoiChunkSizeTiles;
+        var key = new Point(cx, cy);
+
+        if (_poiChunks.ContainsKey(key))
+            return;
+
+        var pois = GeneratePoiChunk(cx, cy);
+        _poiChunks[key] = pois;
+
+        for (int i = 0; i < pois.Count; i++)
+            _poiByTile[pois[i].Tile] = pois[i];
+    }
+
+    // ---------------- Drawing: Player / Props / POIs ----------------
 
     private void DrawWorldPlayer(SpriteBatch sb)
     {
@@ -627,6 +696,9 @@ public sealed class WorldMapScene : SceneBase
             {
                 props = GeneratePropChunk(cx, cy);
                 _propChunks[key] = props;
+
+                for (int i = 0; i < props.Count; i++)
+                    if (props[i].BlocksMove) _propBlocked.Add(props[i].Tile);
             }
 
             for (int i = 0; i < props.Count; i++)
@@ -649,6 +721,83 @@ public sealed class WorldMapScene : SceneBase
         }
     }
 
+    private void DrawWorldPois(SpriteBatch sb, Rectangle viewWorldRect)
+    {
+        if (_map == null || _world == null) return;
+
+        const int tileSize = 32;
+
+        int minTx = Math.Max(0, viewWorldRect.Left / tileSize);
+        int minTy = Math.Max(0, viewWorldRect.Top / tileSize);
+        int maxTx = Math.Min(_map.Width - 1, viewWorldRect.Right / tileSize + 1);
+        int maxTy = Math.Min(_map.Height - 1, viewWorldRect.Bottom / tileSize + 1);
+
+        int minCx = minTx / PoiChunkSizeTiles;
+        int minCy = minTy / PoiChunkSizeTiles;
+        int maxCx = maxTx / PoiChunkSizeTiles;
+        int maxCy = maxTy / PoiChunkSizeTiles;
+
+        for (int cy = minCy; cy <= maxCy; cy++)
+        for (int cx = minCx; cx <= maxCx; cx++)
+        {
+            var key = new Point(cx, cy);
+
+            if (!_poiChunks.TryGetValue(key, out var pois))
+            {
+                pois = GeneratePoiChunk(cx, cy);
+                _poiChunks[key] = pois;
+
+                for (int i = 0; i < pois.Count; i++)
+                    _poiByTile[pois[i].Tile] = pois[i];
+            }
+
+            for (int i = 0; i < pois.Count; i++)
+            {
+                var poi = pois[i];
+                var t = poi.Tile;
+
+                if (t.X < minTx || t.X > maxTx || t.Y < minTy || t.Y > maxTy)
+                    continue;
+
+                var tl = _map.CellToWorldTopLeft(t);
+
+                // Prefer a dedicated sprite if you register one:
+                // poi.town / poi.ruin / poi.pass
+                string spriteId = poi.Kind switch
+                {
+                    PoiKind.Town => "poi.town",
+                    PoiKind.Ruin => "poi.ruin",
+                    PoiKind.MountainPass => "poi.pass",
+                    _ => ""
+                };
+
+                if (!string.IsNullOrEmpty(spriteId) && _s.Sprites.TryGet(spriteId, out var tex, out var origin))
+                {
+                    var pos = new Vector2(tl.X + 16, tl.Y + 32);
+                    sb.Draw(tex, pos, null, Color.White, 0f, origin, 1f, SpriteEffects.None, 0f);
+                }
+                else
+                {
+                    // Fallback marker: a little “signpost” pill over the tile
+                    var r = new Rectangle((int)tl.X + 10, (int)tl.Y + 6, 12, 6);
+
+                    var c = poi.Kind switch
+                    {
+                        PoiKind.Town => Color.Cyan * 0.95f,
+                        PoiKind.Ruin => Color.MediumPurple * 0.95f,
+                        PoiKind.MountainPass => Color.Orange * 0.95f,
+                        _ => Color.White * 0.85f
+                    };
+
+                    sb.Draw(_white!, r, c);
+                    sb.Draw(_white!, new Rectangle(r.X, r.Y, r.Width, 1), Color.White * 0.45f);
+                }
+            }
+        }
+    }
+
+    // ---------------- Generation: Props ----------------
+
     private List<WorldProp> GeneratePropChunk(int chunkX, int chunkY)
     {
         if (_map == null || _world == null || _terrainFlat == null || _flagsFlat == null)
@@ -669,8 +818,12 @@ public sealed class WorldMapScene : SceneBase
         for (int y = startY; y < endY; y++)
         for (int x = startX; x < endX; x++)
         {
-            // Skip solid world cells
+            // Avoid solid terrain cells
             if (_map.IsSolidCell(x, y))
+                continue;
+
+            // Avoid placing blocking props on POI tiles (POIs need to be walkable/enterable)
+            if (_poiByTile.ContainsKey(new Point(x, y)))
                 continue;
 
             int idx = x + y * w;
@@ -727,14 +880,98 @@ public sealed class WorldMapScene : SceneBase
                 props.Add(new WorldProp(sprite, new Point(x, y), blocks));
         }
 
-        // draw back-to-front
+        // back-to-front draw (lower Y drawn later looks "in front")
         props.Sort((a, b) => a.Tile.Y.CompareTo(b.Tile.Y));
         return props;
     }
 
+    // ---------------- Generation: POIs ----------------
+
+    private List<WorldPoi> GeneratePoiChunk(int chunkX, int chunkY)
+    {
+        if (_map == null || _world == null || _terrainFlat == null || _flagsFlat == null)
+            return new List<WorldPoi>(0);
+
+        int w = _world.Width;
+        int h = _world.Height;
+
+        int startX = chunkX * PoiChunkSizeTiles;
+        int startY = chunkY * PoiChunkSizeTiles;
+
+        int endX = Math.Min(startX + PoiChunkSizeTiles, w);
+        int endY = Math.Min(startY + PoiChunkSizeTiles, h);
+
+        // Deterministic per chunk
+        int seed = Hash(_s.World.WorldSeed ^ 0x51C0FFEE, chunkX, chunkY);
+        var rng = new Random(seed);
+
+        // Roughly: 0-2 POIs per chunk depending on terrain
+        int attempts = 6;
+
+        var pois = new List<WorldPoi>(2);
+
+        for (int i = 0; i < attempts; i++)
+        {
+            int x = rng.Next(startX, endX);
+            int y = rng.Next(startY, endY);
+
+            var tile = new Point(x, y);
+
+            // Must be in bounds and not solid
+            if ((uint)x >= (uint)w || (uint)y >= (uint)h)
+                continue;
+
+            if (_map.IsSolidCell(x, y))
+                continue;
+
+            // Don't stack POIs
+            if (_poiByTile.ContainsKey(tile))
+                continue;
+
+            int idx = x + y * w;
+            var tid = (TileId)_terrainFlat[idx];
+            var flags = (TileFlags)_flagsFlat[idx];
+            var zone = ZoneResolver.ResolveFrom(tid, flags);
+
+            // Choose POI kind based on zone, with small chance
+            PoiKind? kind = zone.Id switch
+            {
+                ZoneId.Grasslands => (rng.Next(100) < 6 ? PoiKind.Town : null),
+                ZoneId.Plains => (rng.Next(100) < 5 ? PoiKind.Town : null),
+                ZoneId.Forest => (rng.Next(100) < 5 ? PoiKind.Ruin : null),
+                ZoneId.Ruins => (rng.Next(100) < 12 ? PoiKind.Ruin : null),
+                ZoneId.Mountains => (rng.Next(100) < 6 ? PoiKind.MountainPass : null),
+                _ => null
+            };
+
+            if (kind == null)
+                continue;
+
+            // Reserve tile
+            var name = kind.Value switch
+            {
+                PoiKind.Town => "Town",
+                PoiKind.Ruin => "Ruins",
+                PoiKind.MountainPass => "Mountain Pass",
+                _ => "POI"
+            };
+
+            var poi = new WorldPoi(kind.Value, tile, name);
+            pois.Add(poi);
+            _poiByTile[tile] = poi;
+
+            // Typically stop at 1 per chunk for now; tweak later
+            if (pois.Count >= 1)
+                break;
+        }
+
+        return pois;
+    }
+
+    // ---------------- Utility ----------------
+
     private static Vector2 Jitter(Point tile)
     {
-        // subtle deterministic jitter: -1..+1 px
         int h = Hash(1337, tile.X, tile.Y);
         int jx = (h & 0x3) - 1;
         int jy = ((h >> 2) & 0x3) - 1;
@@ -754,8 +991,6 @@ public sealed class WorldMapScene : SceneBase
             return h;
         }
     }
-
-    // ---------------- Existing helpers ----------------
 
     private static BeginnersLuck.WorldGen.WorldMap BuildWorldMap(WorldDto dto)
     {

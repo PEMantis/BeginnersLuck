@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BeginnersLuck.Engine")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fc019cde23a1fa876cf4f1d066bf469773f33a53")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7c5d8ccb6d0ca433e0cf09957ea9768967311411")]
 [assembly: System.Reflection.AssemblyProductAttribute("BeginnersLuck.Engine")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BeginnersLuck.Engine")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

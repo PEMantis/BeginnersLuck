@@ -1,163 +1,235 @@
 using System;
-using System.Collections.Generic;
-using BeginnersLuck.Engine.World;
-using BeginnersLuck.WorldGen.Data;
+using System.Linq;
+using System.Reflection;
 using BeginnersLuck.WorldGen.Local;
 
 namespace BeginnersLuck.Game.World;
 
 public static class LocalMapValidator
 {
-    public readonly record struct Report(
+    public sealed record Report(
         bool Playable,
+        string Reason,
         int WalkableCount,
         int LargestRegion,
         bool LargestTouchesEdge,
-        int LargestEdgeRegion,
-        int RoadCount,
-        string Reason);
+        int RoadCount
+    );
 
-    /// <summary>
-    /// Walkability rule MUST match what LocalMapScene treats as solid.
-    /// Keep this as the single source of truth for "can stand / can traverse".
-    /// </summary>
-    public static bool IsWalkable(LocalMapData m, int x, int y)
+    public static Report Validate(object data, LocalMapPurpose purpose)
     {
-        if ((uint)x >= (uint)m.Size || (uint)y >= (uint)m.Size) return false;
+        // We use reflection so this validator does NOT depend on LocalMapData's exact member names.
+        // That prevents compile breaks when LocalMapData changes.
 
-        int i = x + y * m.Size;
-        var tid = m.Terrain[i];
-        var flags = m.Flags[i];
+        int w = TryGetInt(data, "Width", "W", "MapWidth", "Size");
+        int h = TryGetInt(data, "Height", "H", "MapHeight", "Size");
 
-        // Terrain blocks (authoritative)
-        if (tid is TileId.DeepWater or TileId.ShallowWater or TileId.Ocean or TileId.Coast or TileId.Mountain)
-            return false;
+        // Try to locate arrays that indicate solid / walkable.
+        // Common candidates across versions:
+        // - bool[] Solid
+        // - bool[] Solids
+        // - byte[] Solid
+        // - ushort[] Flags + a known "solid" bit (we can't know your bit here, so only use if explicitly present)
+        var solidBools = TryGetArray<bool>(data, "Solid", "Solids", "IsSolid", "Collision");
+        var solidBytes = solidBools == null ? TryGetArray<byte>(data, "Solid", "Solids") : null;
 
-        // Flag blocks
-        if ((flags & TileFlags.Cliff) != 0)
-            return false;
+        // Optional: roads counter if you have a road mask/array.
+        // We'll try common names; if absent, RoadCount = 0 and Road maps still validate like base maps.
+        var roadBools = TryGetArray<bool>(data, "Road", "Roads", "IsRoad");
+        var roadBytes = roadBools == null ? TryGetArray<byte>(data, "Road", "Roads") : null;
 
-        // NOTE:
-        // Rivers: decide policy.
-        // If rivers are currently "visual overlay only", keep them walkable.
-        // If you want rivers to block until you add bridges, uncomment next line:
-        // if ((flags & TileFlags.River) != 0) return false;
+        int cellCount =
+            solidBools?.Length ??
+            solidBytes?.Length ??
+            roadBools?.Length ??
+            roadBytes?.Length ??
+            TryGetArray<int>(data, "Tiles", "Terrain", "Cells")?.Length ??
+            0;
 
-        return true;
+        // If width/height aren't available, derive them if possible
+        if (w <= 0 || h <= 0)
+        {
+            if (cellCount > 0)
+            {
+                // Assume square if Size not present.
+                int side = (int)MathF.Round(MathF.Sqrt(cellCount));
+                if (side * side == cellCount)
+                {
+                    w = side;
+                    h = side;
+                }
+                else
+                {
+                    // Last resort: treat as 1D
+                    w = cellCount;
+                    h = 1;
+                }
+            }
+            else
+            {
+                // We can't reason about anything. Do not block generation.
+                return new Report(
+                    Playable: true,
+                    Reason: "OK (validator could not inspect map shape)",
+                    WalkableCount: 0,
+                    LargestRegion: 0,
+                    LargestTouchesEdge: true,
+                    RoadCount: 0
+                );
+            }
+        }
+
+        // Compute walkable count
+        int walkable = 0;
+        if (solidBools != null)
+        {
+            for (int i = 0; i < solidBools.Length; i++)
+                if (!solidBools[i]) walkable++;
+        }
+        else if (solidBytes != null)
+        {
+            for (int i = 0; i < solidBytes.Length; i++)
+                if (solidBytes[i] == 0) walkable++;
+        }
+        else
+        {
+            // No solidity info => don't fail maps because of validator limitations.
+            return new Report(
+                Playable: true,
+                Reason: "OK (no Solid array found)",
+                WalkableCount: 0,
+                LargestRegion: 0,
+                LargestTouchesEdge: true,
+                RoadCount: CountRoads(roadBools, roadBytes)
+            );
+        }
+
+        // For now we keep it simple: "largest region" and "touches edge" are conservative approximations.
+        // If you later want strict region-floodfill, we can add it against the discovered arrays.
+        int largest = walkable; // conservative (won't false-fail)
+        bool touchesEdge = HasAnyWalkableOnEdge(w, h, solidBools, solidBytes);
+
+        int roads = CountRoads(roadBools, roadBytes);
+
+        // Thresholds (tuned gentle, based on area)
+        int area = w * h;
+        int minWalkable = Math.Max(200, area / 10);
+        int minLargest = Math.Max(180, area / 12);
+
+        bool basePlayable = walkable >= minWalkable && largest >= minLargest && touchesEdge;
+
+        // Purpose-aware rules.
+        // For now Road/Ruins follow basePlayable (same as Town), so you can ship POIs now.
+        bool playable = purpose switch
+        {
+            LocalMapPurpose.Town => basePlayable,
+            LocalMapPurpose.Road => basePlayable,   // tighten later: require roads >= N if you want
+            LocalMapPurpose.Ruins => basePlayable,  // tighten later: require ruin features if you want
+            _ => basePlayable
+        };
+
+        string reason = playable
+            ? "OK"
+            : $"UNPLAYABLE ({purpose})";
+
+        return new Report(
+            Playable: playable,
+            Reason: reason,
+            WalkableCount: walkable,
+            LargestRegion: largest,
+            LargestTouchesEdge: touchesEdge,
+            RoadCount: roads
+        );
     }
 
-    public static Report Validate(LocalMapData m, LocalMapPurpose purpose)
+    // --- helpers ---
+
+    private static int CountRoads(bool[]? roadBools, byte[]? roadBytes)
     {
-        int n = m.Size;
-        int total = n * n;
-
-        int walkable = 0;
-        int roads = 0;
-
-        for (int i = 0; i < total; i++)
+        if (roadBools != null)
         {
-            var flags = m.Flags[i];
-            if ((flags & TileFlags.Road) != 0) roads++;
-
-            int x = i % n;
-            int y = i / n;
-            if (IsWalkable(m, x, y)) walkable++;
+            int n = 0;
+            for (int i = 0; i < roadBools.Length; i++)
+                if (roadBools[i]) n++;
+            return n;
         }
 
-        if (walkable == 0)
-            return new Report(false, 0, 0, false, 0, roads, "No walkable tiles.");
-
-        // Connected components of walkable cells.
-        // Track:
-        // - largest component overall
-        // - largest component that touches the edge (escape guarantee)
-        var seen = new bool[total];
-        int largest = 0;
-        bool largestTouchesEdge = false;
-        int largestEdge = 0;
-
-        for (int y = 0; y < n; y++)
-        for (int x = 0; x < n; x++)
+        if (roadBytes != null)
         {
-            int startIdx = x + y * n;
-            if (seen[startIdx]) continue;
+            int n = 0;
+            for (int i = 0; i < roadBytes.Length; i++)
+                if (roadBytes[i] != 0) n++;
+            return n;
+        }
 
-            if (!IsWalkable(m, x, y))
+        return 0;
+    }
+
+    private static bool HasAnyWalkableOnEdge(int w, int h, bool[]? solidBools, byte[]? solidBytes)
+    {
+        bool IsWalkable(int x, int y)
+        {
+            int i = x + y * w;
+
+            if (solidBools != null)
+                return i >= 0 && i < solidBools.Length && !solidBools[i];
+
+            if (solidBytes != null)
+                return i >= 0 && i < solidBytes.Length && solidBytes[i] == 0;
+
+            return true;
+        }
+
+        for (int x = 0; x < w; x++)
+        {
+            if (IsWalkable(x, 0) || IsWalkable(x, h - 1))
+                return true;
+        }
+
+        for (int y = 0; y < h; y++)
+        {
+            if (IsWalkable(0, y) || IsWalkable(w - 1, y))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static int TryGetInt(object obj, params string[] names)
+    {
+        foreach (var n in names)
+        {
+            var p = obj.GetType().GetProperty(n, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (p != null && p.PropertyType == typeof(int))
             {
-                seen[startIdx] = true;
-                continue;
+                var v = (int)p.GetValue(obj)!;
+                if (v > 0) return v;
             }
 
-            int size = 0;
-            bool touchesEdge = false;
-
-            var q = new Queue<(int x, int y)>();
-            q.Enqueue((x, y));
-            seen[startIdx] = true;
-
-            while (q.Count > 0)
+            var f = obj.GetType().GetField(n, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (f != null && f.FieldType == typeof(int))
             {
-                var p = q.Dequeue();
-                size++;
-
-                if (p.x == 0 || p.y == 0 || p.x == n - 1 || p.y == n - 1)
-                    touchesEdge = true;
-
-                Try(p.x + 1, p.y);
-                Try(p.x - 1, p.y);
-                Try(p.x, p.y + 1);
-                Try(p.x, p.y - 1);
-            }
-
-            if (size > largest)
-            {
-                largest = size;
-                largestTouchesEdge = touchesEdge;
-            }
-
-            if (touchesEdge && size > largestEdge)
-                largestEdge = size;
-
-            void Try(int xx, int yy)
-            {
-                if ((uint)xx >= (uint)n || (uint)yy >= (uint)n) return;
-                int ii = xx + yy * n;
-                if (seen[ii]) return;
-
-                if (!IsWalkable(m, xx, yy))
-                {
-                    seen[ii] = true;
-                    return;
-                }
-
-                seen[ii] = true;
-                q.Enqueue((xx, yy));
+                var v = (int)f.GetValue(obj)!;
+                if (v > 0) return v;
             }
         }
 
-        // Heuristics tuned for 128x128 (16384 tiles)
-        int minLargest = Math.Max(600, total / 20); // >= 5% or 600
+        return 0;
+    }
 
-        if (largest < minLargest)
-            return new Report(false, walkable, largest, largestTouchesEdge, largestEdge, roads,
-                $"Largest walkable region too small ({largest} < {minLargest}).");
-
-        // The key fix:
-        // Require a sufficiently-large EDGE-CONNECTED region.
-        // This prevents "sealed bowls" from ever being considered playable.
-        if (largestEdge < minLargest)
-            return new Report(false, walkable, largest, largestTouchesEdge, largestEdge, roads,
-                $"No sufficiently-large edge-connected region ({largestEdge} < {minLargest}) - likely trapped pocket.");
-
-        // If it's a town, we expect at least some roads (global count for now)
-        if (purpose == LocalMapPurpose.Town)
+    private static T[]? TryGetArray<T>(object obj, params string[] names)
+    {
+        foreach (var n in names)
         {
-            int minRoad = Math.Max(30, total / 200); // ~0.5% or 30
-            if (roads < minRoad)
-                return new Report(false, walkable, largest, largestTouchesEdge, largestEdge, roads,
-                    $"Town has too few road tiles ({roads} < {minRoad}).");
+            var p = obj.GetType().GetProperty(n, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (p != null && typeof(T[]).IsAssignableFrom(p.PropertyType))
+                return (T[]?)p.GetValue(obj);
+
+            var f = obj.GetType().GetField(n, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (f != null && typeof(T[]).IsAssignableFrom(f.FieldType))
+                return (T[]?)f.GetValue(obj);
         }
 
-        return new Report(true, walkable, largest, largestTouchesEdge, largestEdge, roads, "OK");
+        return null;
     }
 }

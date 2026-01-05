@@ -12,5 +12,6 @@ public enum TileFlags : ushort
     Forest = 1 << 4,
     RiverSource = 1 << 5,
 
-    Town = 1 << 6
+    Town = 1 << 6,
+    Ruins = 1 << 7
 }

@@ -29,6 +29,7 @@ public static class LocalMapAdapter
 
         var terrain = new TileId[count];
         var flags = new TileFlags[count];
+        
         Array.Copy(map.Terrain, terrain, count);
         Array.Copy(map.Flags, flags, count);
 

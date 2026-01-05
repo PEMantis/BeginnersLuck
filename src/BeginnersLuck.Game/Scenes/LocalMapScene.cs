@@ -74,14 +74,17 @@ public sealed class LocalMapScene : SceneBase
         {
             int i = x + y * n;
 
-            var tid = _local.Terrain[i];
-            var flags = _local.Flags[i];
+                var tid = _local.Terrain[i];
+                var flags = _local.Flags[i];
+                bool solid =
+                    WorldTilePalette.IsSolid(tid) ||
+                    (flags & TileFlags.Coast) != 0 ||
+                    (flags & TileFlags.Cliff) != 0 ||
+                    (flags & TileFlags.River) != 0 ||        // only if your rivers are meant to block
+                    (flags & TileFlags.Ruins) != 0;          // NEW: pillars block
 
-            bool solid =
-                tid is TileId.DeepWater or TileId.ShallowWater or TileId.Ocean or TileId.Coast or TileId.Mountain
-                || (flags & TileFlags.Cliff) != 0;
 
-            _map.SetSolidCell(x, y, solid);
+                _map.SetSolidCell(x, y, solid);
         }
 
         var edgeReach = ComputeReachableFromEdge(_map);

@@ -14,5 +14,7 @@ public enum TileId : byte
     Ocean = 9,
     Coast = 10,
     Mountain = 11,
-    Hill = 12
+    Hill = 12,
+    Ruins = 13,
+    Forest = 14
 }

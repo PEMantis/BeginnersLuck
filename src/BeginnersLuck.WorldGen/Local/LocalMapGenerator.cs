@@ -1,3 +1,4 @@
+using System;
 using BeginnersLuck.WorldGen.Data;
 using BeginnersLuck.WorldGen.Local.Steps;
 
@@ -20,14 +21,43 @@ public sealed class LocalMapGenerator : ILocalMapGenerator
 
         ReadWorldTile(ctx);
 
-        var steps = new ILocalGenStep[]
+        var steps = request.Purpose switch
         {
-            new LocalFieldsStep(),
-            new LocalTerrainStep(),
-            new LocalPortalStep(),
-            new LocalRiverStep(),
-            new LocalTownStep(),
-            new LocalRoadStep(),
+            LocalMapPurpose.Town => new ILocalGenStep[]
+            {
+                new LocalFieldsStep(),
+                new LocalTerrainStep(),
+                new LocalPortalStep(),
+                new LocalRiverStep(),
+                new LocalTownStep(),
+                new LocalRoadStep(),
+            },
+
+            LocalMapPurpose.Road => new ILocalGenStep[]
+            {
+                new LocalFieldsStep(),
+                new LocalTerrainStep(),
+                new LocalPortalStep(),
+                new LocalRiverStep(),
+                new LocalRoadStep(),
+            },
+
+            LocalMapPurpose.Ruins => new ILocalGenStep[]
+            {
+                new LocalFieldsStep(),
+                new LocalTerrainStep(),
+                new LocalPortalStep(),
+                new LocalRiverStep(),
+                new LocalRuinsStep(),
+            },
+
+            _ => new ILocalGenStep[]
+            {
+                new LocalFieldsStep(),
+                new LocalTerrainStep(),
+                new LocalPortalStep(),
+                new LocalRiverStep(),
+            }
         };
 
         foreach (var step in steps)
@@ -46,15 +76,47 @@ public sealed class LocalMapGenerator : ILocalMapGenerator
 
         ReadWorldTile(ctx);
 
-        var steps = new ILocalGenStep[]
+        var steps = request.Purpose switch
         {
-            new LocalFieldsStep(),
-            new LocalTerrainStep(),
-            new LocalPortalStep(),
-            new LocalBiomeFeatureStep(),
-            new LocalRiverStep(),
-            new LocalTownStep(),
-            new LocalRoadStep(),
+            LocalMapPurpose.Town => new ILocalGenStep[]
+            {
+                new LocalFieldsStep(),
+                new LocalTerrainStep(),
+                new LocalPortalStep(),
+                new LocalBiomeFeatureStep(),
+                new LocalRiverStep(),
+                new LocalTownStep(),
+                new LocalRoadStep(),
+            },
+
+            LocalMapPurpose.Road => new ILocalGenStep[]
+            {
+                new LocalFieldsStep(),
+                new LocalTerrainStep(),
+                new LocalPortalStep(),
+                new LocalBiomeFeatureStep(),
+                new LocalRiverStep(),
+                new LocalRoadStep(),
+            },
+
+            LocalMapPurpose.Ruins => new ILocalGenStep[]
+            {
+                new LocalFieldsStep(),
+                new LocalTerrainStep(),
+                new LocalPortalStep(),
+                new LocalBiomeFeatureStep(),
+                new LocalRiverStep(),
+                new LocalRuinsStep(),
+            },
+
+            _ => new ILocalGenStep[]
+            {
+                new LocalFieldsStep(),
+                new LocalTerrainStep(),
+                new LocalPortalStep(),
+                new LocalBiomeFeatureStep(),
+                new LocalRiverStep(),
+            }
         };
 
         foreach (var step in steps)
@@ -94,24 +156,13 @@ public sealed class LocalMapGenerator : ILocalMapGenerator
 
         var worldTerrain = chunk.Terrain[idx];
 
-        // SeaLevel is a byte threshold (0..255) used by LocalTerrainStep.
-        // For inland tiles, it must be LOW so we don't flood the whole map.
-        //
-        // Think of it like: "how high does the ocean reach into this local map?"
-        // Inland wilderness: near-zero (no ocean).
-        // Coast: some shoreline.
-        // Ocean/deep water: lots of water.
-
         ctx.SeaLevel = worldTerrain switch
         {
-            TileId.DeepWater    => 145, // mostly water
+            TileId.DeepWater    => 145,
             TileId.Ocean        => 145,
-            TileId.ShallowWater => 130, // water but more shoreline
-            TileId.Coast        => 120, // noticeable coast
-            _                   => 20,  // ✅ inland default: almost no sea
+            TileId.ShallowWater => 130,
+            TileId.Coast        => 120,
+            _                   => 20,
         };
-
-        // If you WANT a tiny bit of ponds/lakes inland, do it in LocalTerrainStep
-        // using a "lakes" noise mask, not by raising global sea level.
     }
 }

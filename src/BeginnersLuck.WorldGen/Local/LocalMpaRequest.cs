@@ -4,8 +4,11 @@ namespace BeginnersLuck.WorldGen.Local;
 
 public enum LocalMapPurpose : byte
 {
-    Wilderness = 0,
-    Town = 1
+    None = 0,
+    Wilderness = 1,
+    Town = 2,
+    Road = 3,
+    Ruins = 4,
 }
 
 public sealed record LocalMapRequest(

@@ -149,13 +149,13 @@ public sealed class RoadStep : IWorldGenStep
             int cyp = current / w;
 
             // 4-neighbor movement keeps roads clean
-            Span<(int x, int y)> n = stackalloc (int, int)[]
-            {
+            Span<(int x, int y)> n =
+            [
                 (cxp - 1, cyp),
                 (cxp + 1, cyp),
                 (cxp, cyp - 1),
                 (cxp, cyp + 1)
-            };
+            ];
 
             int curG = gScore[current];
 
