@@ -370,27 +370,24 @@ public sealed class BattleScene : SceneBase
         }
         else
         {
-            {
-                var hint =
-                    _phase switch
-                    {
-                        Phase.Intro => "ENTER/A: START",
-                        Phase.LevelUp => "ENTER/A: CONTINUE",
-                        Phase.VictorySummary => "ENTER/A: LEAVE  |  UP/DOWN: LOOT",
-                        Phase.Defeat => "ENTER/A: CONTINUE",
-                        Phase.Exit => "ENTER/A: LEAVE",
-                        _ => "ENTER/A: CONTINUE"
-                    };
+            var hint =
+                _phase switch
+                {
+                    Phase.Intro => "ENTER/A: START",
+                    Phase.LevelUp => "ENTER/A: CONTINUE",
+                    Phase.VictorySummary => "ENTER/A: LEAVE  |  UP/DOWN: LOOT",
+                    Phase.Defeat => "ENTER/A: CONTINUE",
+                    Phase.Exit => "ENTER/A: LEAVE",
+                    _ => "ENTER/A: CONTINUE"
+                };
 
-                int scale = 1;
-                var size = _s.TitleFont.Measure(hint, scale);
+            int scale = 1;
+            var size = _s.TitleFont.Measure(hint, scale);
 
-                int x = _panelCommands.X + 18;
-                int y = _panelCommands.Bottom - 12 - size.Y; // 12px padding from bottom
+            int x = _panelCommands.X + 18;
+            int y = _panelCommands.Bottom - 12 - size.Y; // 12px padding from bottom
 
-                _s.TitleFont.Draw(sb, hint, new Vector2(x, y), Color.White * 0.75f, scale);
-            }
-
+            _s.TitleFont.Draw(sb, hint, new Vector2(x, y), Color.White * 0.75f, scale);
         }
 
         if (_phase == Phase.LevelUp)
@@ -611,7 +608,8 @@ public sealed class BattleScene : SceneBase
 
     private void DrawPlayerPanel(SpriteBatch sb)
     {
-        _s.TitleFont.Draw(sb, "HERO", new Vector2(_panelLeft.X + 12, _panelLeft.Y + 12), Color.White * 0.9f, 1);
+        _s.TitleFont.Draw(sb, "PERRY", new Vector2(_panelLeft.X + 12, _panelLeft.Y + 12), Color.White * 0.9f, 1);
+
 
         var hpText = $"HP {_playerHp}/{_playerMaxHp}";
         _s.UiFont.Draw(sb, hpText, new Vector2(_panelLeft.X + 12, _panelLeft.Y + 38), Color.White * 0.9f, 1);
@@ -622,7 +620,8 @@ public sealed class BattleScene : SceneBase
 
     private void DrawEnemiesPanel(SpriteBatch sb)
     {
-        _s.TitleFont.Draw(sb, "ENEMIES", new Vector2(_panelRight.X + 12, _panelRight.Y + 12), Color.White * 0.9f, 1);
+        _s.TitleFont.Draw(sb, _encounter.Name.ToUpperInvariant(), new Vector2(_panelRight.X + 12, _panelRight.Y + 12), Color.White * 0.9f, 1);
+
 
         int y = _panelRight.Y + 38;
 

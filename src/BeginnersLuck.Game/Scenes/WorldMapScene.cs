@@ -480,6 +480,7 @@ public sealed class WorldMapScene : SceneBase
                 Color.White * 0.75f, 1);
         }
 
+        if(_lastZone != null)
         _s.UiFont.Draw(sb,
             $"ZONE: {_lastZone.Id} danger={_lastZone.Danger} table={_lastZone.EncounterTableId} chance={_lastEncounterChance:P0}",
             new Vector2(hud.X + 8, hud.Y + 44),

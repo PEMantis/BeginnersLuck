@@ -35,13 +35,13 @@ public sealed class ZoneMap
         // Simple defaults for now (we’ll evolve these into proper tuning later)
         return id switch
         {
-            ZoneId.Road => new ZoneInfo(id, Danger: 1, EncounterTableId: "road"),
-            ZoneId.Grasslands => new ZoneInfo(id, Danger: 2, EncounterTableId: "plains_low"),
-            ZoneId.Forest => new ZoneInfo(id, Danger: 3, EncounterTableId: "plains_high"),
-            ZoneId.Ruins => new ZoneInfo(id, Danger: 4, EncounterTableId: "plains_high"),
-            ZoneId.Lake => new ZoneInfo(id, Danger: 0, EncounterTableId: "none"),
-            ZoneId.Mountains => new ZoneInfo(id, Danger: 4, EncounterTableId: "mountain"),
-            _ => new ZoneInfo(ZoneId.None, Danger: 0, EncounterTableId: "none"),
+            ZoneId.Road => new ZoneInfo(id, danger: 1, encounterTableId: "road"),
+            ZoneId.Grasslands => new ZoneInfo(id, danger: 2, encounterTableId: "plains_low"),
+            ZoneId.Forest => new ZoneInfo(id, danger: 3, encounterTableId: "plains_high"),
+            ZoneId.Ruins => new ZoneInfo(id, danger: 4, encounterTableId: "plains_high"),
+            ZoneId.Lake => new ZoneInfo(id, danger: 0, encounterTableId: "none"),
+            ZoneId.Mountains => new ZoneInfo(id, danger: 4, encounterTableId: "mountain"),
+            _ => new ZoneInfo(ZoneId.None, danger: 0, encounterTableId: "none"),
         };
     }
 
