@@ -267,14 +267,19 @@ public sealed class WorldMapScene : SceneBase
                     _debugMoves++;
                     _debugTriedThisStep = true;
 
-                    _lastZone = ZoneResolver.Resolve(_s, _playerCell);
+                    int idx = _playerCell.X + _playerCell.Y * _world!.Width;
+                    var tid = (TileId)_terrainFlat![idx];
+                    var flags = (TileFlags)_flagsFlat![idx];
+
+                    _lastZone = ZoneResolver.ResolveFrom(tid, flags);
                     _lastEncounterChance = _s.EncounterDirector.ComputeChancePerStep(_lastZone);
 
                     _debugRolls++;
                     _debugLastRoll = _s.Rng.NextDouble();
 
                     // Encounters: only roll when a move actually happened
-                    var intent = _s.EncounterDirector.OnPlayerMoved(_playerCell, _lastZone, _s.Rng);
+                   var intent = _s.EncounterDirector.OnPlayerMoved(_playerCell, _lastZone, _s.Rng);
+
                     if (intent.HasValue)
                     {
                         StartEncounterToast(intent.Value.Encounter, ks, pad);
@@ -1174,6 +1179,5 @@ public sealed class WorldMapScene : SceneBase
         // 4 neighbors
         [RoadMask.N | RoadMask.E | RoadMask.S | RoadMask.W] = "road.cross",
     };
-
 
 }

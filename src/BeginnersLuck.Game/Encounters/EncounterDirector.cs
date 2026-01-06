@@ -26,6 +26,7 @@ public sealed class EncounterDirector
 
     public int CooldownRemainingSteps => _cooldownSteps;
     public int StepsSinceLastEncounter => _stepsSinceLast;
+    public float RoadEncounterMultiplier = 0.45f; // 0.45 = 55% fewer encounters on roads
 
     public EncounterDirector(IEncounterSource source)
     {
@@ -34,9 +35,7 @@ public sealed class EncounterDirector
 
     public EncounterIntent? OnPlayerMoved(Point newCell, ZoneInfo zone, Random rng)
     {
-        if (rng == null) throw new ArgumentNullException(nameof(rng));
-
-        _stepsSinceLast++;
+        ArgumentNullException.ThrowIfNull(rng);
 
         if (_cooldownSteps > 0)
         {
@@ -47,8 +46,9 @@ public sealed class EncounterDirector
         if (zone.EncounterTableId == "none" || zone.Id == ZoneId.None)
             return null;
 
-        float chance = ComputeChancePerStep(zone);
+        _stepsSinceLast++; // move this here
 
+        float chance = ComputeChancePerStep(zone);
         if (rng.NextDouble() > chance)
             return null;
 
@@ -72,10 +72,16 @@ public sealed class EncounterDirector
         // Base + danger
         float chance = BaseChancePerStep + (zone.Danger * DangerBonusPerStep);
 
-        // ✅ Pity ramp
-        // After 10 steps: +10% if PityRampPerStep=0.01
+        // Pity ramp
         chance += _stepsSinceLast * PityRampPerStep;
+
+        // ✅ Reduced chance on roads (no OnRoad flag)
+        if (zone.Id == ZoneId.Road)
+            chance *= RoadEncounterMultiplier;
 
         return MathHelper.Clamp(chance, 0f, MaxChancePerStep);
     }
+
+
+
 }
