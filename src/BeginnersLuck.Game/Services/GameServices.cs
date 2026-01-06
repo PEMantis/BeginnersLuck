@@ -45,7 +45,7 @@ public sealed class GameServices
     public EncounterDirector EncounterDirector { get; }
     public ZoneMap Zones { get; set; } = null!;
 
-    public PlayerState Player { get; }
+    public CharacterState Player { get; }
     public ItemDb Items { get; }
 
     public WorldState World { get; }
@@ -64,7 +64,7 @@ public sealed class GameServices
         ToastQueue toasts,
         Random rng,
         EncounterDirector encounters,
-        PlayerState player,
+        CharacterState player,
         ItemDb items,
         WorldState world,
         SpriteDb sprites)

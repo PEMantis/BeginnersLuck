@@ -1,15 +1,22 @@
 using System;
-using BeginnersLuck.Game.Services;
 
 namespace BeginnersLuck.Game.State;
 
-public sealed class PlayerState
+public sealed class CharacterState
 {
+    // --- Identity (JRPG-friendly) ---
+    public string Id { get; init; } = "pc_0";
+    public string Name { get; set; } = "Hero";
+
     // --- Core stats ---
     public int Level { get; private set; } = 1;
 
     public int MaxHp { get; private set; } = 100;
     public int Hp { get; private set; } = 80;
+
+    // Optional MP now, useful soon (skills). Keep at 0 until you use it.
+    public int MaxMp { get; private set; } = 0;
+    public int Mp { get; private set; } = 0;
 
     public int Gold { get; private set; } = 50;
 
@@ -19,7 +26,7 @@ public sealed class PlayerState
     // Optional: total XP for UI/telemetry
     public int TotalXp { get; private set; } = 0;
 
-    public PlayerInventory Inventory { get; } = new();
+    public InventoryState Inventory { get; } = new();
 
     // Last award summary (handy for UI toasts)
     public int LastLevelsGained { get; private set; } = 0;
@@ -45,6 +52,11 @@ public sealed class PlayerState
     {
         if (amount <= 0) return;
         Hp = Math.Max(0, Hp - amount);
+    }
+
+    public void HealToFull()
+    {
+        Hp = MaxHp;
     }
 
     // ---------------------------
@@ -86,19 +98,6 @@ public sealed class PlayerState
         LastLevelsGained = levelsGained;
     }
 
-    /// <summary>
-    /// XP required to go from current Level -> Level+1.
-    /// "Fair and balanced" default polynomial:
-    /// - fast early (you see progress immediately)
-    /// - ramps later (doesn't explode into grind)
-    ///
-    /// L1: 20
-    /// L2: 40
-    /// L3: 70
-    /// L4: 110
-    /// L5: 160
-    /// L10: 560
-    /// </summary>
     public int XpToNextLevel()
     {
         int l = Math.Max(1, Level);
@@ -112,18 +111,10 @@ public sealed class PlayerState
         return Math.Max(1, need);
     }
 
-    /// <summary>
-    /// For UI bars: 0..1 progress to next level.
-    /// </summary>
     public float XpPercentToNextLevel()
     {
         int need = XpToNextLevel();
         return (need <= 0) ? 0f : Math.Clamp(XpIntoLevel / (float)need, 0f, 1f);
-    }
-
-    public void HealToFull()
-    {
-        Hp = MaxHp;
     }
 
     // ---------------------------
@@ -139,12 +130,4 @@ public sealed class PlayerState
         MaxHp += 5;
         Hp = MaxHp;
     }
-    public PlayerXpReport AddXpWithReport(int xp)
-    {
-        int oldLevel = Level; // whatever your level property is
-        AddXp(xp);            // your existing method
-        return new PlayerXpReport { OldLevel = oldLevel, NewLevel = Level };
-    }
-
-
 }

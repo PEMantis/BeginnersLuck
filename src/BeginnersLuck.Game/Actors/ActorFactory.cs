@@ -8,10 +8,10 @@ public sealed class ActorFactory
 {
     private int _nextId = 1;
 
-    public Actor CreatePlayer(PlayerState player)
+    public Actor CreatePlayer(CharacterState player)
     {
         // For now, just mirror HP values.
-        // Later we can have ActorState forward to PlayerState instead of copying.
+        // Later we can have ActorState forward to CharacterState instead of copying.
         var def = new ActorDef
         {
             Key = "player",

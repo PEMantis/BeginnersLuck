@@ -88,7 +88,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var rng = new Random(12345);
         var encounterSource = new BasicEncounterSource();
         var encounterDirector = new EncounterDirector(encounterSource);
-        var player = new BeginnersLuck.Game.State.PlayerState();
+        var player = new BeginnersLuck.Game.State.CharacterState();
         var items = BeginnersLuck.Game.Items.DefaultItems.Create();
         var world = new WorldState { WorldSeed = 777 };
 

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace BeginnersLuck.Game.State;
 
-public sealed class PlayerInventory
+public sealed class InventoryState
 {
     public Dictionary<string, int> Counts { get; } = new();
 
@@ -39,4 +39,6 @@ public sealed class PlayerInventory
 
         return true;
     }
+    public bool Has(string id, int qty = 1) => CountOf(id) >= qty;
+
 }
