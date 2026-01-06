@@ -102,6 +102,24 @@ public class Game1 : Microsoft.Xna.Framework.Game
         sprites.Register("world.mountain", "Sprites/World/mountain_64x64.png");
         sprites.Register("world.ruin_pillar", "Sprites/World/ruin_pillar_32x48.png");
         sprites.Register("world.player", "Sprites/World/player_16x16.png");
+        // Roads (32x32 overlay sprites)
+        sprites.Register("world.road.dot", "Sprites/World/Road/road_dot_32x32.png");
+        sprites.Register("world.road.end_n", "Sprites/World/Road/road_end_n_32x32.png");
+        sprites.Register("world.road.end_e", "Sprites/World/Road/road_end_e_32x32.png");
+        sprites.Register("world.road.end_s", "Sprites/World/Road/road_end_s_32x32.png");
+        sprites.Register("world.road.end_w", "Sprites/World/Road/road_end_w_32x32.png");
+        sprites.Register("world.road.straight_h", "Sprites/World/Road/road_straight_h_32x32.png");
+        sprites.Register("world.road.straight_v", "Sprites/World/Road/road_straight_v_32x32.png");
+        sprites.Register("world.road.corner_ne", "Sprites/World/Road/road_corner_ne_32x32.png");
+        sprites.Register("world.road.corner_nw", "Sprites/World/Road/road_corner_nw_32x32.png");
+        sprites.Register("world.road.corner_se", "Sprites/World/Road/road_corner_se_32x32.png");
+        sprites.Register("world.road.corner_sw", "Sprites/World/Road/road_corner_sw_32x32.png");
+        sprites.Register("world.road.t_n", "Sprites/World/Road/road_t_n_32x32.png");
+        sprites.Register("world.road.t_e", "Sprites/World/Road/road_t_e_32x32.png");
+        sprites.Register("world.road.t_s", "Sprites/World/Road/road_t_s_32x32.png");
+        sprites.Register("world.road.t_w", "Sprites/World/Road/road_t_w_32x32.png");
+        sprites.Register("world.road.cross", "Sprites/World/Road/road_cross_32x32.png");
+
         // your existing: rng, encounterDirector, player, itemDb, raw, font
         _services = new BeginnersLuck.Game.Services.GameServices(
             pixel: _pixel,

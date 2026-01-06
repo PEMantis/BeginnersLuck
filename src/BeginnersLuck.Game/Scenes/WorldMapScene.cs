@@ -71,12 +71,6 @@ public sealed class WorldMapScene : SceneBase
     private readonly HashSet<Point> _propBlocked = new(); // collision set (tile coords)
     private const int PropChunkSizeTiles = 32;
 
-    // ---- POIs overlay ----
-    private readonly Dictionary<Point, List<WorldPoi>> _poiChunks = new();
-    private readonly Dictionary<Point, WorldPoi> _poiByTile = new(); // fast lookup for enter/interact
-    private const int PoiChunkSizeTiles = 32;
-    private Texture2D? _sprRock, _sprTree, _sprMountain, _sprRuin, _sprPlayer;
-
     public WorldMapScene(GameServices s)
     {
         _s = s ?? throw new ArgumentNullException(nameof(s));
@@ -89,8 +83,7 @@ public sealed class WorldMapScene : SceneBase
 
         _propChunks.Clear();
         _propBlocked.Clear();
-        _poiChunks.Clear();
-        _poiByTile.Clear();
+       
 
         int seed = _s.World.WorldSeed;
         string worldJson = WorldPaths.WorldJsonPath(seed);
@@ -140,7 +133,6 @@ public sealed class WorldMapScene : SceneBase
 
         const int tileSize = 32;
         _map = new TileMap(w, h, tileSize, new int[w * h]);
-
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
             {
@@ -150,13 +142,7 @@ public sealed class WorldMapScene : SceneBase
 
                 _map.Tiles[i] = WorldTilePalette.ToTileIndex(tid);
 
-                bool solid =
-          WorldTilePalette.IsSolid(tid) ||
-          (flags & TileFlags.Coast) != 0 ||
-          (flags & TileFlags.Cliff) != 0 ||
-          (flags & TileFlags.River) != 0;          // NEW: pillars block
-
-
+                bool solid = WorldCollisionResolver.IsSolid(tid, flags);
                 _map.SetSolidCell(x, y, solid);
             }
 
@@ -178,9 +164,6 @@ public sealed class WorldMapScene : SceneBase
             minRegionSize: minRegion,
             requireTouchesEdge: true);
 
-        // Ensure POIs generated near spawn so you immediately see something
-        EnsurePoiChunkForCell(_playerCell);
-        EnsurePropChunkForCell(_playerCell);
 
         _cam.Position = _map.CellToWorldCenter(_playerCell);
     }
@@ -201,8 +184,6 @@ public sealed class WorldMapScene : SceneBase
 
         _propChunks.Clear();
         _propBlocked.Clear();
-        _poiChunks.Clear();
-        _poiByTile.Clear();
     }
 
     public override void Update(UpdateContext uc)
@@ -279,10 +260,6 @@ public sealed class WorldMapScene : SceneBase
 
             if ((uint)next.X < (uint)_map.Width && (uint)next.Y < (uint)_map.Height)
             {
-                // Ensure collision data exists for this region
-                EnsurePropChunkForCell(next);
-                EnsurePoiChunkForCell(next);
-
                 if (!IsBlocked(next))
                 {
                     _playerCell = next;
@@ -314,11 +291,9 @@ public sealed class WorldMapScene : SceneBase
                 }
                 else
                 {
-                    // If it's a POI tile, allow standing adjacent and "enter" with E/A.
-                    // Block message only if not a POI.
-                    if (!TryGetPoiAt(next, out _))
-                        _s.Toasts.Push("Blocked.", 0.35f);
+                    _s.Toasts.Push("Blocked.", 0.35f);
                 }
+
             }
         }
 
@@ -398,7 +373,6 @@ public sealed class WorldMapScene : SceneBase
 
         // Ensure visible area caches are ready (nice for immediate draw)
         EnsurePropChunkForCell(_playerCell);
-        EnsurePoiChunkForCell(_playerCell);
 
         _prevKs = ks;
         _prevPad = pad;
@@ -427,7 +401,6 @@ public sealed class WorldMapScene : SceneBase
         if (_map != null)
         {
             EnsurePropChunkForCell(dest);
-            EnsurePoiChunkForCell(dest);
 
             if ((uint)dest.X >= (uint)_map.Width || (uint)dest.Y >= (uint)_map.Height || IsBlocked(dest))
                 dest = from;
@@ -461,8 +434,8 @@ public sealed class WorldMapScene : SceneBase
 
         _mapRenderer.Draw(sb, _map, view);
 
-        // Draw POI overlays in a small radius around player for perf
-        DrawWorldOverlays(sb, view);
+        // Roads and similar tile-driven overlays
+        DrawWorldRoads(sb, view);
 
         // props first (behind POI markers)
         DrawWorldProps(sb, view);
@@ -494,10 +467,10 @@ public sealed class WorldMapScene : SceneBase
             int idx = _playerCell.X + _playerCell.Y * _world.Width;
             var tid = (TileId)_terrainFlat[idx];
             bool propBlocked = _propBlocked.Contains(_playerCell);
-            bool onPoi = _poiByTile.ContainsKey(_playerCell);
+            
 
             _s.UiFont.Draw(sb,
-                $"WORLD: {_playerCell.X},{_playerCell.Y} {tid} flags={_flagsFlat[idx]} solid={_map.IsSolidCell(_playerCell.X,_playerCell.Y)} propBlock={propBlocked} poi={onPoi}",
+                $"WORLD: {_playerCell.X},{_playerCell.Y} {tid} flags={_flagsFlat[idx]} solid={_map.IsSolidCell(_playerCell.X,_playerCell.Y)} propBlock={propBlocked}",
                 new Vector2(hud.X + 8, hud.Y + 32),
                 Color.White * 0.75f, 1);
         }
@@ -507,116 +480,26 @@ public sealed class WorldMapScene : SceneBase
             new Vector2(hud.X + 8, hud.Y + 44),
             Color.White * 0.7f, 1);
 
+        var poi = CurrentPoiType();
+        if (poi != PoiType.None)
+        {
+            // A simple bottom-left tooltip box
+            var r = new Rectangle(8, PixelRenderer.InternalHeight - 34, 420, 26);
+            sb.Draw(_white!, r, new Color(10, 10, 18) * 0.78f);
+
+            string label = WorldPoiResolver.DisplayName(poi);
+            string prompt = WorldPoiResolver.Prompt(poi);
+
+            _s.UiFont.Draw(sb, $"{label}  -  {prompt}", new Vector2(r.X + 8, r.Y + 7), Color.White * 0.90f, 1);
+        }
+
+
         sb.End();
     }
 
     // ---------------- POI / Enter logic ----------------
 
-    private bool TryGetPoiAt(Point tile, out WorldPoi poi)
-        => _poiByTile.TryGetValue(tile, out poi);
-
-    private void TryEnterPoi(WorldPoi poi, KeyboardState ks, GamePadState pad)
-    {
-        if (_world == null || _worldMap == null)
-        {
-            _s.Toasts.Push("World not loaded.", 1.0f);
-            return;
-        }
-
-        int seed = _s.World.WorldSeed;
-        int wx = poi.Tile.X;
-        int wy = poi.Tile.Y;
-
-        // Pick a purpose. 
-        LocalMapPurpose purpose = poi.Kind switch
-        {
-            PoiKind.Town => LocalMapPurpose.Town,
-            PoiKind.Ruin => LocalMapPurpose.Ruins,
-            PoiKind.MountainPass => LocalMapPurpose.Road,
-            _ => LocalMapPurpose.Town
-        };
-
-
-        // Optional: wipe cache so POIs regenerate their local with distinct vibe
-        // (Comment out if you prefer persistence)
-        string localBin = WorldPaths.LocalBin(seed, wx, wy);
-        // if (File.Exists(localBin)) File.Delete(localBin);
-
-        localBin = LocalMapCache.EnsureLocalExists(
-            world: _worldMap!,
-            worldSeed: seed,
-            wx: wx,
-            wy: wy,
-            localSize: 128,
-            purpose: purpose
-        );
-
-        var spawn = new SpawnRequest(SpawnIntent.EnterFromRoad, IncomingDir: Opposite(_lastWorldMoveDir));
-
-        _s.Toasts.Push($"ENTER: {poi.Name}", 0.8f);
-
-        if (!_s.Fade.Active)
-            _s.Fade.Start(0.25f, () => _s.Scenes.Push(new LocalMapScene(_s, localBin, purpose, spawn)));
-    }
-
-    private void DrawWorldOverlays(SpriteBatch sb, Rectangle view)
-    {
-        if (_map == null || _world == null || _terrainFlat == null || _flagsFlat == null) return;
-
-        int w = _world.Width;
-        int h = _world.Height;
-
-        // Convert view rect (world px) into cell bounds
-        var topLeft = _map.WorldToCell(new Vector2(view.Left, view.Top));
-        var botRight = _map.WorldToCell(new Vector2(view.Right, view.Bottom));
-
-        int x0 = Math.Clamp(topLeft.X - 2, 0, w - 1);
-        int y0 = Math.Clamp(topLeft.Y - 2, 0, h - 1);
-        int x1 = Math.Clamp(botRight.X + 2, 0, w - 1);
-        int y1 = Math.Clamp(botRight.Y + 2, 0, h - 1);
-
-        for (int y = y0; y <= y1; y++)
-            for (int x = x0; x <= x1; x++)
-            {
-                int i = x + y * w;
-                var tid = (TileId)_terrainFlat[i];
-                var f = (TileFlags)_flagsFlat[i];
-
-                // World position
-                var cellTopLeft = _map.CellToWorldTopLeft(new Point(x, y));
-
-                // Example decorations by terrain
-                // (You can tune these rules later)
-                if (tid == TileId.Mountain && _sprMountain != null)
-                {
-                    sb.Draw(_sprMountain, new Vector2(cellTopLeft.X - 16, cellTopLeft.Y - 32), Color.White);
-                }
-                else if ((f & TileFlags.Ruins) != 0 && _sprRuin != null)
-                {
-                    sb.Draw(_sprRuin, new Vector2(cellTopLeft.X, cellTopLeft.Y - 16), Color.White);
-                }
-                else if (tid == TileId.Forest && _sprTree != null)
-                {
-                    // scatter every other tile for readability
-                    if (((x ^ y) & 1) == 0)
-                        sb.Draw(_sprTree, new Vector2(cellTopLeft.X, cellTopLeft.Y - 16), Color.White);
-                }
-                else if (tid == TileId.Ruins && _sprRock != null) // if you have no TileId.Ruins, remove this branch
-                {
-                    sb.Draw(_sprRock, new Vector2(cellTopLeft.X, cellTopLeft.Y), Color.White);
-                }
-
-                // Optional: road overlay (for now just tint the base tile, or later draw a road sprite)
-                // If you later add a road sprite, draw it here.
-            }
-
-        // Draw player sprite on top
-        if (_sprPlayer != null)
-        {
-            var p = _map.CellToWorldTopLeft(_playerCell);
-            sb.Draw(_sprPlayer, new Vector2(p.X + 8, p.Y + 8), Color.White);
-        }
-    }
+ 
 
 
     // ---------------- Collision ----------------
@@ -625,15 +508,12 @@ public sealed class WorldMapScene : SceneBase
     {
         if (_map == null) return true;
 
-        // POI tiles are enterable even if props would otherwise block
-        if (_poiByTile.ContainsKey(cell))
-            return false;
-
         if (_map.IsSolidCell(cell.X, cell.Y))
             return true;
 
         return _propBlocked.Contains(cell);
     }
+
 
     private void EnsurePropChunkForCell(Point cell)
     {
@@ -653,22 +533,6 @@ public sealed class WorldMapScene : SceneBase
             if (props[i].BlocksMove)
                 _propBlocked.Add(props[i].Tile);
         }
-    }
-
-    private void EnsurePoiChunkForCell(Point cell)
-    {
-        int cx = cell.X / PoiChunkSizeTiles;
-        int cy = cell.Y / PoiChunkSizeTiles;
-        var key = new Point(cx, cy);
-
-        if (_poiChunks.ContainsKey(key))
-            return;
-
-        var pois = GeneratePoiChunk(cx, cy);
-        _poiChunks[key] = pois;
-
-        for (int i = 0; i < pois.Count; i++)
-            _poiByTile[pois[i].Tile] = pois[i];
     }
 
     // ---------------- Drawing: Player / Props / POIs ----------------
@@ -776,6 +640,76 @@ public sealed class WorldMapScene : SceneBase
             }
     }
 
+    private void DrawWorldRoads(SpriteBatch sb, Rectangle viewWorldRect)
+    {
+        if (_map == null || _world == null || _flagsFlat == null) return;
+
+        int w = _world.Width;
+        int h = _world.Height;
+
+        int minX = Math.Max(0, viewWorldRect.Left / _map.TileSize);
+        int minY = Math.Max(0, viewWorldRect.Top / _map.TileSize);
+        int maxX = Math.Min(w - 1, (viewWorldRect.Right / _map.TileSize) + 1);
+        int maxY = Math.Min(h - 1, (viewWorldRect.Bottom / _map.TileSize) + 1);
+
+        for (int y = minY; y <= maxY; y++)
+            for (int x = minX; x <= maxX; x++)
+            {
+                int i = x + y * w;
+                var flags = (TileFlags)_flagsFlat[i];
+
+                if (!WorldRoadAutoTiler.HasRoad(flags))
+                    continue;
+
+                bool n = y > 0 && WorldRoadAutoTiler.HasRoad((TileFlags)_flagsFlat[x + (y - 1) * w]);
+                bool e = x < w - 1 && WorldRoadAutoTiler.HasRoad((TileFlags)_flagsFlat[(x + 1) + y * w]);
+                bool s = y < h - 1 && WorldRoadAutoTiler.HasRoad((TileFlags)_flagsFlat[x + (y + 1) * w]);
+                bool ww = x > 0 && WorldRoadAutoTiler.HasRoad((TileFlags)_flagsFlat[(x - 1) + y * w]);
+
+                string spriteId = WorldRoadAutoTiler.Resolve(n, e, s, ww);
+
+                if (!_s.Sprites.TryGet(spriteId, out var tex, out _))
+                    continue;
+
+                var tl = _map.CellToWorldTopLeft(new Point(x, y));
+                sb.Draw(tex, new Vector2(tl.X, tl.Y), Color.White);
+            }
+    }
+
+
+
+    private static string PickRoadSpriteId(bool n, bool e, bool s, bool w)
+    {
+        int count = (n ? 1 : 0) + (e ? 1 : 0) + (s ? 1 : 0) + (w ? 1 : 0);
+
+        if (count == 0) return "world.road.dot";
+        if (count == 4) return "world.road.cross";
+
+        if (count == 3)
+        {
+            if (!n) return "world.road.t_s"; // missing N => open to S/E/W, so T points S
+            if (!e) return "world.road.t_w";
+            if (!s) return "world.road.t_n";
+            return "world.road.t_e"; // missing W
+        }
+
+        if (count == 2)
+        {
+            if (n && s) return "world.road.straight_v";
+            if (e && w) return "world.road.straight_h";
+
+            if (n && e) return "world.road.corner_ne";
+            if (n && w) return "world.road.corner_nw";
+            if (s && e) return "world.road.corner_se";
+            return "world.road.corner_sw"; // s && w
+        }
+
+        // count == 1 (end)
+        if (n) return "world.road.end_n";
+        if (e) return "world.road.end_e";
+        if (s) return "world.road.end_s";
+        return "world.road.end_w";
+    }
 
     // ---------------- Generation: Props ----------------
 
@@ -803,14 +737,17 @@ public sealed class WorldMapScene : SceneBase
             if (_map.IsSolidCell(x, y))
                 continue;
 
-            // Avoid placing blocking props on POI tiles (POIs need to be walkable/enterable)
-            if (_poiByTile.ContainsKey(new Point(x, y)))
-                continue;
+                int idx = x + y * w;
+                var tid = (TileId)_terrainFlat[idx];
+                var flags = (TileFlags)_flagsFlat[idx];
+                // Avoid placing blocking props on POI tiles (POIs need to be walkable/enterable)
+                // Avoid placing blocking props on POI tiles (ruins/town/road)
+                if ((flags & (TileFlags.Ruins | TileFlags.Town | TileFlags.Road)) != 0)
+                    continue;
 
-            int idx = x + y * w;
-            var tid = (TileId)_terrainFlat[idx];
-            var flags = (TileFlags)_flagsFlat[idx];
-            var zone = ZoneResolver.ResolveFrom(tid, flags);
+
+
+                var zone = ZoneResolver.ResolveFrom(tid, flags);
 
             int tileSeed = Hash(seed, x, y);
             var rng = new Random(tileSeed);
@@ -868,86 +805,7 @@ public sealed class WorldMapScene : SceneBase
 
     // ---------------- Generation: POIs ----------------
 
-    private List<WorldPoi> GeneratePoiChunk(int chunkX, int chunkY)
-    {
-        if (_map == null || _world == null || _terrainFlat == null || _flagsFlat == null)
-            return new List<WorldPoi>(0);
-
-        int w = _world.Width;
-        int h = _world.Height;
-
-        int startX = chunkX * PoiChunkSizeTiles;
-        int startY = chunkY * PoiChunkSizeTiles;
-
-        int endX = Math.Min(startX + PoiChunkSizeTiles, w);
-        int endY = Math.Min(startY + PoiChunkSizeTiles, h);
-
-        // Deterministic per chunk
-        int seed = Hash(_s.World.WorldSeed ^ 0x51C0FFEE, chunkX, chunkY);
-        var rng = new Random(seed);
-
-        // Roughly: 0-2 POIs per chunk depending on terrain
-        int attempts = 6;
-
-        var pois = new List<WorldPoi>(2);
-
-        for (int i = 0; i < attempts; i++)
-        {
-            int x = rng.Next(startX, endX);
-            int y = rng.Next(startY, endY);
-
-            var tile = new Point(x, y);
-
-            // Must be in bounds and not solid
-            if ((uint)x >= (uint)w || (uint)y >= (uint)h)
-                continue;
-
-            if (_map.IsSolidCell(x, y))
-                continue;
-
-            // Don't stack POIs
-            if (_poiByTile.ContainsKey(tile))
-                continue;
-
-            int idx = x + y * w;
-            var tid = (TileId)_terrainFlat[idx];
-            var flags = (TileFlags)_flagsFlat[idx];
-            var zone = ZoneResolver.ResolveFrom(tid, flags);
-
-            // Choose POI kind based on zone, with small chance
-            PoiKind? kind = zone.Id switch
-            {
-                ZoneId.Grasslands => (rng.Next(100) < 6 ? PoiKind.Town : null),
-                ZoneId.Plains => (rng.Next(100) < 5 ? PoiKind.Town : null),
-                ZoneId.Forest => (rng.Next(100) < 5 ? PoiKind.Ruin : null),
-                ZoneId.Ruins => (rng.Next(100) < 12 ? PoiKind.Ruin : null),
-                ZoneId.Mountains => (rng.Next(100) < 6 ? PoiKind.MountainPass : null),
-                _ => null
-            };
-
-            if (kind == null)
-                continue;
-
-            // Reserve tile
-            var name = kind.Value switch
-            {
-                PoiKind.Town => "Town",
-                PoiKind.Ruin => "Ruins",
-                PoiKind.MountainPass => "Mountain Pass",
-                _ => "POI"
-            };
-
-            var poi = new WorldPoi(kind.Value, tile, name);
-            pois.Add(poi);
-            _poiByTile[tile] = poi;
-
-            // Typically stop at 1 per chunk for now; tweak later
-            if (pois.Count >= 1)
-                break;
-        }
-
-        return pois;
-    }
+  
 
     // ---------------- Utility ----------------
 
@@ -1118,13 +976,9 @@ public sealed class WorldMapScene : SceneBase
                 var tid = (TileId)_terrainFlat[i];
                 var flags = (TileFlags)_flagsFlat[i];
 
-
-                bool solid =
-          WorldTilePalette.IsSolid(tid) ||
-          (flags & TileFlags.Coast) != 0 ||
-          (flags & TileFlags.Cliff) != 0 ||
-          (flags & TileFlags.River) != 0;          // NEW: pillars block
+                bool solid = WorldCollisionResolver.IsSolid(tid, flags);
                 _map.SetSolidCell(x, y, solid);
+
             }
     }
     private void StampRoadFromPlayer(int length = 10)
@@ -1248,6 +1102,78 @@ public sealed class WorldMapScene : SceneBase
         }
     }
 
+    
+    private PoiType CurrentPoiType()
+    {
+        if (_world == null || _terrainFlat == null || _flagsFlat == null) return PoiType.None;
+
+        int idx = _playerCell.X + _playerCell.Y * _world.Width;
+        var tid = (TileId)_terrainFlat[idx];
+        var flags = (TileFlags)_flagsFlat[idx];
+        return WorldPoiResolver.Resolve(tid, flags);
+    }
+
     private bool Pressed(KeyboardState ks, Keys k) => ks.IsKeyDown(k) && !_prevKs.IsKeyDown(k);
     private bool Pressed(GamePadState pad, Buttons b) => pad.IsButtonDown(b) && !_prevPad.IsButtonDown(b);
+
+    [Flags]
+    private enum RoadMask : byte
+    {
+        None = 0,
+        N = 1 << 0,
+        E = 1 << 1,
+        S = 1 << 2,
+        W = 1 << 3
+    }
+
+    private bool HasRoad(int x, int y)
+    {
+        if (_world == null || _flagsFlat == null) return false;
+        if ((uint)x >= (uint)_world.Width || (uint)y >= (uint)_world.Height) return false;
+
+        int i = x + y * _world.Width;
+        return (((TileFlags)_flagsFlat[i]) & TileFlags.Road) != 0;
+    }
+
+    private RoadMask GetRoadMask(int x, int y)
+    {
+        RoadMask m = RoadMask.None;
+        if (HasRoad(x, y - 1)) m |= RoadMask.N;
+        if (HasRoad(x + 1, y)) m |= RoadMask.E;
+        if (HasRoad(x, y + 1)) m |= RoadMask.S;
+        if (HasRoad(x - 1, y)) m |= RoadMask.W;
+        return m;
+    }
+
+    private static readonly Dictionary<RoadMask, string> RoadSpriteByMask = new()
+    {
+        // 0 neighbors
+        [RoadMask.None] = "road.dot",
+
+        // 1 neighbor (end-caps)
+        [RoadMask.N] = "road.end_n",
+        [RoadMask.E] = "road.end_e",
+        [RoadMask.S] = "road.end_s",
+        [RoadMask.W] = "road.end_w",
+
+        // 2 neighbors
+        [RoadMask.N | RoadMask.S] = "road.ns",
+        [RoadMask.E | RoadMask.W] = "road.ew",
+
+        [RoadMask.N | RoadMask.E] = "road.ne",
+        [RoadMask.E | RoadMask.S] = "road.se",
+        [RoadMask.S | RoadMask.W] = "road.sw",
+        [RoadMask.W | RoadMask.N] = "road.nw",
+
+        // 3 neighbors (T-junctions)
+        [RoadMask.N | RoadMask.E | RoadMask.S] = "road.tee_e", // missing W, open to E side “stem” is W; naming varies
+        [RoadMask.E | RoadMask.S | RoadMask.W] = "road.tee_s",
+        [RoadMask.S | RoadMask.W | RoadMask.N] = "road.tee_w",
+        [RoadMask.W | RoadMask.N | RoadMask.E] = "road.tee_n",
+
+        // 4 neighbors
+        [RoadMask.N | RoadMask.E | RoadMask.S | RoadMask.W] = "road.cross",
+    };
+
+
 }
