@@ -5,6 +5,7 @@ using BeginnersLuck.Engine.Rendering;
 using BeginnersLuck.Engine.Scenes;
 using BeginnersLuck.Engine.UI;
 using BeginnersLuck.Engine.Update;
+using BeginnersLuck.Game.Actors;
 using BeginnersLuck.Game.Battles;
 using BeginnersLuck.Game.Encounters;
 using BeginnersLuck.Game.Services;
@@ -32,26 +33,11 @@ public sealed class BattleScene : SceneBase
 
     private enum ExitReason { None, Fled, Victory, Defeat }
 
-    private sealed class Enemy
-    {
-        public string Id { get; }
-        public string Name { get; }
-        public int Hp { get; set; }
-        public int MaxHp { get; }
-        public bool Alive => Hp > 0;
-
-        public Enemy(EnemyDef def)
-        {
-            Id = def.Id;
-            Name = def.Name;
-            Hp = def.Hp;
-            MaxHp = def.Hp;
-        }
-    }
 
     private readonly GameServices _s;
     private readonly EncounterDef _encounter;
-    private readonly Enemy[] _enemies;
+    private readonly List<BattleEnemy> _enemies = new();
+
 
     private Texture2D? _white;
 
@@ -94,10 +80,16 @@ public sealed class BattleScene : SceneBase
     {
         _s = s ?? throw new ArgumentNullException(nameof(s));
         _encounter = encounter;
+        _enemies.Clear();
 
-        _enemies = new Enemy[encounter.Enemies.Length];
-        for (int i = 0; i < _enemies.Length; i++)
-            _enemies[i] = new Enemy(encounter.Enemies[i]);
+        foreach (var line in _encounter.Enemies)
+        {
+            var def = _s.Monsters.Get(line.MonsterId);
+            int count = Math.Max(1, line.Count);
+
+            for (int i = 0; i < count; i++)
+                _enemies.Add(new BattleEnemy(def));
+        }
 
         _prevKs = seedKs;
         _prevPad = seedPad;
@@ -198,7 +190,7 @@ public sealed class BattleScene : SceneBase
                 }
 
                 int dmg = _s.Rng.Next(3, 7); // 3-6
-                target.Hp = Math.Max(0, target.Hp - dmg);
+                target.Damage(Math.Max(0, target.Hp - dmg));
 
                 _message = $"YOU HIT {target.Name.ToUpperInvariant()} FOR {dmg}!";
                 _messageT = 0.9f;
@@ -625,7 +617,7 @@ public sealed class BattleScene : SceneBase
 
         int y = _panelRight.Y + 38;
 
-        for (int i = 0; i < _enemies.Length; i++)
+        for (int i = 0; i < _enemies.Count; i++)
         {
             var e = _enemies[i];
 
@@ -682,14 +674,14 @@ public sealed class BattleScene : SceneBase
 
     private bool AllEnemiesDown()
     {
-        for (int i = 0; i < _enemies.Length; i++)
+        for (int i = 0; i < _enemies.Count; i++)
             if (_enemies[i].Alive) return false;
         return true;
     }
 
-    private Enemy? FirstLivingEnemy()
+    private BattleEnemy? FirstLivingEnemy()
     {
-        for (int i = 0; i < _enemies.Length; i++)
+        for (int i = 0; i < _enemies.Count; i++)
             if (_enemies[i].Alive) return _enemies[i];
         return null;
     }

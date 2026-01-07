@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace BeginnersLuck.Game.Actors;
+namespace BeginnersLuck.Game.Stats;
 
 public enum StatType { MaxHp, MaxMp, Atk, Def, Mag, Res, Spd, Luck }
 

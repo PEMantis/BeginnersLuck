@@ -2,20 +2,20 @@ using System;
 
 namespace BeginnersLuck.Game.Encounters;
 
-public readonly record struct EnemyDef(string Id, string Name, int Hp);
+public readonly record struct EncounterEnemyLine(string MonsterId, int Count);
 
 public sealed class EncounterDef
 {
     public string Id { get; }
     public string Name { get; }
-    public EnemyDef[] Enemies { get; }
+    public EncounterEnemyLine[] Enemies { get; }
 
     public RewardRange Xp { get; init; } = new(3, 7);
     public RewardRange Gold { get; init; } = new(1, 4);
 
     public LootDrop[] Loot { get; init; } = Array.Empty<LootDrop>();
 
-    public EncounterDef(string id, string name, EnemyDef[] enemies)
+    public EncounterDef(string id, string name, EncounterEnemyLine[] enemies)
     {
         Id = id;
         Name = name;

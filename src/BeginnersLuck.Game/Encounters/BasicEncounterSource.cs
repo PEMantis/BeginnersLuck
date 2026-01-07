@@ -11,20 +11,20 @@ public sealed class BasicEncounterSource : IEncounterSource
         {
             ZoneId.Grasslands => Roll(rng,
                 new EncounterDef("slimes_easy", "Slimes",
-                    new[] { new EnemyDef("slime", "Slime", 12), new EnemyDef("slime", "Slime", 12) }),
+                    new[] { new EncounterEnemyLine("slime", 2) }),
                 new EncounterDef("goblins_patrol", "Goblin Patrol",
-                    new[] { new EnemyDef("goblin", "Goblin", 10), new EnemyDef("goblin", "Goblin", 10), new EnemyDef("goblin", "Goblin", 10) })
+                    new[] { new EncounterEnemyLine("goblin", 3) })
             ),
 
             ZoneId.Forest => Roll(rng,
                 new EncounterDef("wolves", "Wolves",
-                    new[] { new EnemyDef("wolf", "Wolf", 14), new EnemyDef("wolf", "Wolf", 14) }),
+                    new[] { new EncounterEnemyLine("wolf", 2) }),
                 new EncounterDef("bandits", "Bandits",
-                    new[] { new EnemyDef("bandit", "Bandit", 16), new EnemyDef("bandit", "Bandit", 16) })
+                    new[] { new EncounterEnemyLine("bandit", 2) })
             ),
 
             ZoneId.Ruins => new EncounterDef("skeletons", "Skeletons",
-                new[] { new EnemyDef("skeleton", "Skeleton", 18), new EnemyDef("skeleton", "Skeleton", 18) }),
+                new[] { new EncounterEnemyLine("skeleton", 2) }),
 
             // ✅ Dev-time guardrail: don't return empty encounters silently.
             _ => throw new InvalidOperationException(

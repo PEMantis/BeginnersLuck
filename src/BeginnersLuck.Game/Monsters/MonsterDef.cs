@@ -1,5 +1,5 @@
 using System;
-using BeginnersLuck.Game.Actors;
+using BeginnersLuck.Game.Stats;
 
 namespace BeginnersLuck.Game.Monsters;
 

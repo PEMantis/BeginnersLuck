@@ -14,6 +14,8 @@ using System;
 using BeginnersLuck.Game.Items;
 using BeginnersLuck.Game.State;
 using BeginnersLuck.Game.Graphics;
+using BeginnersLuck.Game.Stats;
+using BeginnersLuck.Game.Jobs;
 namespace BeginnersLuck.Game;
 
 public class Game1 : Microsoft.Xna.Framework.Game
@@ -91,6 +93,11 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var player = new BeginnersLuck.Game.State.CharacterState();
         var items = BeginnersLuck.Game.Items.DefaultItems.Create();
         var world = new WorldState { WorldSeed = 777 };
+        var jobs = Jobs.DefaultJobs.Create();
+        var stats = new BeginnersLuck.Game.Stats.StatsCalculator(jobs, items);
+        var party = new PartyState();
+        party.Members.Add(player);
+        var monsters = Monsters.DefaultMonsters.Create();
 
         var px = new Texture2D(GraphicsDevice, 1, 1);
         px.SetData(new[] { Color.White });
@@ -136,7 +143,10 @@ public class Game1 : Microsoft.Xna.Framework.Game
             player: player,
             items: items,
             world: world,
-            sprites: sprites
+            sprites: sprites,
+            party: party,
+            stats: stats,
+            monsters: monsters
         );
 
         // avoid circular dependency by setting after

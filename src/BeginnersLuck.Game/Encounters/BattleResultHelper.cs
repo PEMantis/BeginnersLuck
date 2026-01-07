@@ -9,14 +9,21 @@ public static class BattleResultApplier
         if (r.Applied) return;
         r.Applied = true;
 
-        // Only apply rewards on victory (or adjust if you want partial rewards on flee later)
         if (r.Outcome != BattleOutcome.Victory)
             return;
 
         r.XpReport = s.Player.AddXpWithReport(r.Xp);
+
         s.Player.AddGold(r.Gold);
 
         foreach (var line in r.Loot)
             s.Player.Inventory.Add(line.ItemId, line.Qty);
+
+        // ✅ Recompute derived stats once after leveling (job growth now matters)
+        if (r.XpReport.LevelsGained > 0)
+        {
+            var stats = s.Stats.ComputeFor(s.Player);
+            s.Player.ApplyDerivedStats(stats, healToFull: true);
+        }
     }
 }

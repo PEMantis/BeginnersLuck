@@ -7,7 +7,9 @@ using BeginnersLuck.Engine.UI;
 using BeginnersLuck.Game.Encounters;
 using BeginnersLuck.Game.Graphics;
 using BeginnersLuck.Game.Items;
+using BeginnersLuck.Game.Monsters;
 using BeginnersLuck.Game.State;
+using BeginnersLuck.Game.Stats;
 using BeginnersLuck.Game.UI;
 using BeginnersLuck.Game.World;
 using Microsoft.Xna.Framework.Graphics;
@@ -51,6 +53,10 @@ public sealed class GameServices
     public WorldState World { get; }
 
     public SpriteDb Sprites { get; }
+    public PartyState Party { get; }
+    public StatsCalculator Stats { get; }
+
+    public MonsterDb Monsters { get; }
 
     public GameServices(
         PixelRenderer pixel,
@@ -67,7 +73,10 @@ public sealed class GameServices
         CharacterState player,
         ItemDb items,
         WorldState world,
-        SpriteDb sprites)
+        SpriteDb sprites,
+        PartyState party,
+        StatsCalculator stats,
+        MonsterDb monsters)
     {
         Pixel = pixel;
         Scenes = scenes;
@@ -77,15 +86,19 @@ public sealed class GameServices
         UiFont = uiFont;
         TitleFont = titleFont;
         ButtonFont = buttonFont;
-        
+
         PixelWhite = pixelWhite;
         Toasts = toasts;
 
         Rng = rng;
         EncounterDirector = encounters;
-        Player = player;
+        Party = party ?? throw new ArgumentNullException(nameof(party));
+        Player = party.Leader;
         Items = items;
         World = world;
-         Sprites = sprites ?? throw new ArgumentNullException(nameof(sprites));
+        Sprites = sprites ?? throw new ArgumentNullException(nameof(sprites));
+        Stats = stats;
+        Monsters = monsters ?? throw new ArgumentNullException(nameof(monsters));
+
     }
 }

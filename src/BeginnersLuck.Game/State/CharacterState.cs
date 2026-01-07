@@ -1,4 +1,5 @@
 using System;
+using BeginnersLuck.Game.Services;
 
 namespace BeginnersLuck.Game.State;
 
@@ -7,7 +8,7 @@ public sealed class CharacterState
     // --- Identity (JRPG-friendly) ---
     public string Id { get; init; } = "pc_0";
     public string Name { get; set; } = "Hero";
-
+    public string JobId { get; set; } = "fighter";
     // --- Core stats ---
     public int Level { get; private set; } = 1;
 
@@ -124,10 +125,42 @@ public sealed class CharacterState
     private void LevelUp()
     {
         Level++;
-
-        // V1 balance:
-        // +5 Max HP per level, and full heal so it feels great immediately.
-        MaxHp += 5;
-        Hp = MaxHp;
     }
+    public void ApplyDerivedStats(BeginnersLuck.Game.Stats.StatBlock stats, bool healToFull = false)
+    {
+        int newMaxHp = Math.Max(1, stats[BeginnersLuck.Game.Stats.StatType.MaxHp]);
+        int newMaxMp = Math.Max(0, stats[BeginnersLuck.Game.Stats.StatType.MaxMp]);
+
+        // Preserve current % HP when max changes (JRPG-friendly)
+        float hpPct = MaxHp <= 0 ? 1f : (Hp / (float)MaxHp);
+        float mpPct = MaxMp <= 0 ? 1f : (Mp / (float)MaxMp);
+
+        MaxHp = newMaxHp;
+        MaxMp = newMaxMp;
+
+        if (healToFull)
+        {
+            Hp = MaxHp;
+            Mp = MaxMp;
+        }
+        else
+        {
+            Hp = Math.Clamp((int)MathF.Round(MaxHp * hpPct), 0, MaxHp);
+            Mp = Math.Clamp((int)MathF.Round(MaxMp * mpPct), 0, MaxMp);
+        }
+    }
+    public PlayerXpReport AddXpWithReport(int xp)
+    {
+        int oldLevel = Level;
+
+        AddXp(xp, out _);
+
+        return new PlayerXpReport
+        {
+            OldLevel = oldLevel,
+            NewLevel = Level
+        };
+    }
+
+
 }

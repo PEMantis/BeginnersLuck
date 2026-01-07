@@ -15,7 +15,7 @@ public sealed class EncounterDatabase
     public EncounterDef Get(string id)
         => _byId.TryGetValue(id, out var e)
             ? e
-            : new EncounterDef(id, id, Array.Empty<EnemyDef>());
+            : new EncounterDef(id, id, Array.Empty<EncounterEnemyLine>());
 
     public static EncounterDatabase LoadFromJson(string json)
     {
@@ -32,10 +32,8 @@ public sealed class EncounterDatabase
 
             var enemies = (e.Enemies ?? Array.Empty<EnemyDto>())
                 .Where(x => !string.IsNullOrWhiteSpace(x.Id))
-                .Select(x => new EnemyDef(
-                    x.Id!,
-                    string.IsNullOrWhiteSpace(x.Name) ? x.Id! : x.Name!,
-                    x.Hp <= 0 ? 1 : x.Hp))
+                .Select(x => new EncounterEnemyLine(
+                    x.Id!, 1))
                 .ToArray();
 
             dict[e.Id!] = new EncounterDef(
