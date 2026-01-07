@@ -33,4 +33,12 @@ public sealed class StatsCalculator
 
         return total;
     }
+
+    public StatBlock ComputeDerived(StatBlock baseStats)
+    {
+        // V1: no equipment/buffs yet: derived = base
+        var d = new StatBlock();
+        d.CopyFrom(baseStats);
+        return d;
+    }
 }

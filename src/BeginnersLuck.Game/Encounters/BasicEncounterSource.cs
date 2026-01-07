@@ -13,7 +13,7 @@ public sealed class BasicEncounterSource : IEncounterSource
                 new EncounterDef("slimes_easy", "Slimes",
                     new[] { new EncounterEnemyLine("slime", 2) }),
                 new EncounterDef("goblins_patrol", "Goblin Patrol",
-                    new[] { new EncounterEnemyLine("goblin", 3) })
+                    new[] { new EncounterEnemyLine("goblin", 1) })
             ),
 
             ZoneId.Forest => Roll(rng,

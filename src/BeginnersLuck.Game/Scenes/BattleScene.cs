@@ -103,6 +103,9 @@ public sealed class BattleScene : SceneBase
         _white = new Texture2D(graphicsDevice, 1, 1);
         _white.SetData(new[] { Color.White });
 
+        _playerMaxHp = Math.Max(1, _s.Player.MaxHp);
+        _playerHp = Math.Clamp(_s.Player.Hp, 1, _playerMaxHp);
+
         _phase = Phase.Intro;
         _phaseT = 0f;
         _focus = 0;
@@ -117,6 +120,7 @@ public sealed class BattleScene : SceneBase
 
         ComputeLayout();
     }
+
 
     public override void Unload()
     {
@@ -176,38 +180,38 @@ public sealed class BattleScene : SceneBase
                 }
 
                 break;
-            }
-
+                }
             case Phase.PlayerResolve:
-            {
-                if (_phaseT < 0.05f) break;
-
-                var target = FirstLivingEnemy();
-                if (target == null)
                 {
-                    EnterVictoryFlow();
+                    if (_phaseT < 0.05f) break;
+
+                    var target = RandomLivingEnemy();
+                    if (target == null)
+                    {
+                        EnterVictoryFlow();
+                        break;
+                    }
+
+                    int dmg = _s.Rng.Next(3, 7); // 3-6
+                    target.Damage(dmg);
+
+                    _message = $"YOU HIT {target.Name.ToUpperInvariant()} FOR {dmg}!";
+                    _messageT = 0.9f;
+
+                    if (AllEnemiesDown())
+                        EnterVictoryFlow();
+                    else
+                        GoTo(Phase.EnemyResolve);
+
                     break;
                 }
 
-                int dmg = _s.Rng.Next(3, 7); // 3-6
-                target.Damage(Math.Max(0, target.Hp - dmg));
-
-                _message = $"YOU HIT {target.Name.ToUpperInvariant()} FOR {dmg}!";
-                _messageT = 0.9f;
-
-                if (AllEnemiesDown())
-                    EnterVictoryFlow();
-                else
-                    GoTo(Phase.EnemyResolve);
-
-                break;
-            }
 
             case Phase.EnemyResolve:
             {
                 if (_phaseT < 0.20f) break;
 
-                var attacker = FirstLivingEnemy();
+                var attacker = RandomLivingEnemy();
                 if (attacker == null)
                 {
                     EnterVictoryFlow();
@@ -679,12 +683,28 @@ public sealed class BattleScene : SceneBase
         return true;
     }
 
-    private BattleEnemy? FirstLivingEnemy()
+    private BattleEnemy? RandomLivingEnemy()
     {
+        int count = 0;
+
         for (int i = 0; i < _enemies.Count; i++)
-            if (_enemies[i].Alive) return _enemies[i];
+            if (_enemies[i].Alive)
+                count++;
+
+        if (count == 0) return null;
+
+        int pick = _s.Rng.Next(count);
+
+        for (int i = 0; i < _enemies.Count; i++)
+        {
+            if (!_enemies[i].Alive) continue;
+            if (pick-- == 0)
+                return _enemies[i];
+        }
+
         return null;
     }
+
 
     private bool Pressed(KeyboardState ks, Keys k) => ks.IsKeyDown(k) && !_prevKs.IsKeyDown(k);
     private bool Pressed(GamePadState pad, Buttons b) => pad.IsButtonDown(b) && !_prevPad.IsButtonDown(b);

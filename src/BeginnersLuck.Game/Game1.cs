@@ -97,7 +97,12 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var stats = new BeginnersLuck.Game.Stats.StatsCalculator(jobs, items);
         var party = new PartyState();
         party.Members.Add(player);
-        var monsters = Monsters.DefaultMonsters.Create();
+        var monstersJson = System.Text.Encoding.UTF8.GetString(_raw.LoadBytes("Data/monsters.json"));
+        var monsters = BeginnersLuck.Game.Monsters.MonsterDbLoader.LoadFromJson(monstersJson);
+        var skillsJson = System.Text.Encoding.UTF8.GetString(_raw.LoadBytes("Data/skills.json"));
+        var skills = BeginnersLuck.Game.Skills.SkillDbLoader.LoadFromJson(skillsJson);
+        var skillSystem = new BeginnersLuck.Game.Skills.SkillSystem(skills);
+
 
         var px = new Texture2D(GraphicsDevice, 1, 1);
         px.SetData(new[] { Color.White });
@@ -146,7 +151,9 @@ public class Game1 : Microsoft.Xna.Framework.Game
             sprites: sprites,
             party: party,
             stats: stats,
-            monsters: monsters
+            monsters: monsters,
+            skillDb: skills,
+            skillSystem: skillSystem
         );
 
         // avoid circular dependency by setting after

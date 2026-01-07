@@ -8,6 +8,7 @@ using BeginnersLuck.Game.Encounters;
 using BeginnersLuck.Game.Graphics;
 using BeginnersLuck.Game.Items;
 using BeginnersLuck.Game.Monsters;
+using BeginnersLuck.Game.Skills;
 using BeginnersLuck.Game.State;
 using BeginnersLuck.Game.Stats;
 using BeginnersLuck.Game.UI;
@@ -58,6 +59,9 @@ public sealed class GameServices
 
     public MonsterDb Monsters { get; }
 
+    public SkillDb Skills { get; }
+    public SkillSystem SkillSystem { get; }
+
     public GameServices(
         PixelRenderer pixel,
         SceneManager scenes,
@@ -76,7 +80,9 @@ public sealed class GameServices
         SpriteDb sprites,
         PartyState party,
         StatsCalculator stats,
-        MonsterDb monsters)
+        MonsterDb monsters,
+        SkillDb skillDb,
+        SkillSystem skillSystem)
     {
         Pixel = pixel;
         Scenes = scenes;
@@ -99,6 +105,7 @@ public sealed class GameServices
         Sprites = sprites ?? throw new ArgumentNullException(nameof(sprites));
         Stats = stats;
         Monsters = monsters ?? throw new ArgumentNullException(nameof(monsters));
-
+        Skills = skillDb;
+        SkillSystem = skillSystem;
     }
 }

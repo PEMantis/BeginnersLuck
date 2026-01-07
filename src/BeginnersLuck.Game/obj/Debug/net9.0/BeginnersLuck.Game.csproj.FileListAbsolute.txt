@@ -62,3 +62,6 @@
 /home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/bin/Debug/net9.0/ContentRaw/Sprites/World/Road/road_t_n_32x32.png
 /home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/bin/Debug/net9.0/ContentRaw/Sprites/World/Road/road_t_s_32x32.png
 /home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/bin/Debug/net9.0/ContentRaw/Sprites/World/Road/road_t_w_32x32.png
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/bin/Debug/net9.0/ContentRaw/Data/jobs.json
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/bin/Debug/net9.0/ContentRaw/Data/monsters.json
+/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.Game/bin/Debug/net9.0/ContentRaw/Data/skills.json

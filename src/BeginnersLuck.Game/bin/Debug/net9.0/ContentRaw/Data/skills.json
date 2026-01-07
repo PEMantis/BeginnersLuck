@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "skills": [
+    {
+      "id": "atk_basic",
+      "name": "Attack",
+      "target": "EnemySingle",
+      "mpCost": 0,
+      "formula": "atk_basic"
+    }
+  ]
+}

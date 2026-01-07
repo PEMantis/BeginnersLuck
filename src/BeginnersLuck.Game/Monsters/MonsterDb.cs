@@ -5,26 +5,34 @@ namespace BeginnersLuck.Game.Monsters;
 
 public sealed class MonsterDb
 {
-    private readonly Dictionary<string, MonsterDef> _byId = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, MonsterDef> _byId;
 
     public MonsterDb(IEnumerable<MonsterDef> defs)
     {
+        _byId = new Dictionary<string, MonsterDef>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var d in defs)
         {
             d.Validate();
-            _byId[d.Id] = d;
+
+            if (_byId.ContainsKey(d.Id))
+                throw new InvalidOperationException($"Duplicate MonsterDef id '{d.Id}'.");
+
+            _byId.Add(d.Id, d);
         }
     }
 
     public MonsterDef Get(string id)
     {
-        if (!_byId.TryGetValue(id, out var d))
-            throw new KeyNotFoundException($"MonsterDef not found: '{id}'");
+        if (string.IsNullOrWhiteSpace(id))
+            throw new ArgumentException("Monster id was empty.", nameof(id));
 
-        return d;
+        if (_byId.TryGetValue(id, out var def))
+            return def;
+
+        throw new KeyNotFoundException($"MonsterDef not found: '{id}'");
     }
 
-    public bool TryGet(string id, out MonsterDef def) => _byId.TryGetValue(id, out def!);
-
-    public IEnumerable<MonsterDef> All => _byId.Values;
+    public bool TryGet(string id, out MonsterDef def)
+        => _byId.TryGetValue(id, out def!);
 }

@@ -8,10 +8,10 @@ public sealed class Actor
     public ActorDef Def { get; }
     public ActorState State { get; }
 
-    public Actor(ActorId id, ActorDef def, int maxHp)
+    public Actor(ActorId id, ActorDef def, ActorState state)
     {
         Id = id;
         Def = def;
-        State = new ActorState { MaxHp = maxHp, Hp = maxHp };
+        State = state;
     }
 }

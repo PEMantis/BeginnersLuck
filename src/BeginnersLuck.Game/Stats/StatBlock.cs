@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace BeginnersLuck.Game.Stats;
@@ -25,5 +26,15 @@ public sealed class StatBlock
         var b = new StatBlock();
         foreach (var kv in _v) b._v[kv.Key] = kv.Value;
         return b;
+    }
+
+    public void CopyFrom(StatBlock other)
+    {
+        if (other == null) throw new ArgumentNullException(nameof(other));
+
+        // Option A (recommended): if your StatBlock stores values by StatType enum in an array
+        // Loop over all StatType values and copy via the indexer:
+        foreach (StatType st in Enum.GetValues(typeof(StatType)))
+            this[st] = other[st];
     }
 }
