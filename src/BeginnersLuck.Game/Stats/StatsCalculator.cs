@@ -2,6 +2,7 @@ using System;
 using BeginnersLuck.Game.Jobs;
 using BeginnersLuck.Game.Items;
 using BeginnersLuck.Game.State;
+using BeginnersLuck.Game.Status;
 
 namespace BeginnersLuck.Game.Stats;
 
@@ -39,6 +40,17 @@ public sealed class StatsCalculator
         // V1: no equipment/buffs yet: derived = base
         var d = new StatBlock();
         d.CopyFrom(baseStats);
+        return d;
+    }
+
+    public StatBlock ComputeDerived(StatBlock baseStats, StatusController? statuses)
+    {
+        var d = ComputeDerived(baseStats); // call existing method
+        if (statuses == null) return d;
+
+        foreach (StatType s in Enum.GetValues(typeof(StatType)))
+            d[s] = d[s] + statuses.GetFlatMod(s);
+
         return d;
     }
 }

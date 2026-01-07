@@ -58,8 +58,7 @@ public sealed class GameServices
     public StatsCalculator Stats { get; }
 
     public MonsterDb Monsters { get; }
-
-    public SkillDb Skills { get; }
+    public SkillDb SkillDb { get; }
     public SkillSystem SkillSystem { get; }
 
     public GameServices(
@@ -105,7 +104,7 @@ public sealed class GameServices
         Sprites = sprites ?? throw new ArgumentNullException(nameof(sprites));
         Stats = stats;
         Monsters = monsters ?? throw new ArgumentNullException(nameof(monsters));
-        Skills = skillDb;
+        SkillDb = skillDb;
         SkillSystem = skillSystem;
     }
 }

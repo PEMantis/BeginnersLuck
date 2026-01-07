@@ -1,38 +1,53 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
 
 namespace BeginnersLuck.Game.Skills;
 
 public sealed class SkillDb
 {
-    private readonly Dictionary<string, SkillDef> _byId;
+    private readonly Dictionary<string, SkillDef> _byId = new(StringComparer.OrdinalIgnoreCase);
 
-    public SkillDb(IEnumerable<SkillDef> defs)
-    {
-        _byId = new Dictionary<string, SkillDef>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var d in defs)
-        {
-            d.Validate();
-
-            if (_byId.ContainsKey(d.Id))
-                throw new InvalidOperationException($"Duplicate SkillDef id '{d.Id}'.");
-
-            _byId.Add(d.Id, d);
-        }
-    }
+    public IReadOnlyDictionary<string, SkillDef> All => _byId;
 
     public SkillDef Get(string id)
     {
-        if (string.IsNullOrWhiteSpace(id))
-            throw new ArgumentException("Skill id was empty.", nameof(id));
-
-        if (_byId.TryGetValue(id, out var def))
-            return def;
-
-        throw new KeyNotFoundException($"SkillDef not found: '{id}'");
+        if (!_byId.TryGetValue(id, out var def))
+            throw new KeyNotFoundException($"Skill '{id}' not found.");
+        return def;
     }
 
-    public bool TryGet(string id, out SkillDef def)
-        => _byId.TryGetValue(id, out def!);
+    public bool TryGet(string id, out SkillDef? def) => _byId.TryGetValue(id, out def);
+
+    public void LoadFromJson(string json, string? sourceName = null)
+    {
+        var opts = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true
+        };
+
+        var list = JsonSerializer.Deserialize<List<SkillDef>>(json, opts)
+                   ?? throw new InvalidOperationException($"Failed to deserialize skills JSON ({sourceName ?? "unknown source"}).");
+
+        _byId.Clear();
+
+        foreach (var s in list)
+        {
+            if (string.IsNullOrWhiteSpace(s.Id))
+                throw new InvalidOperationException($"Skill with missing Id in {sourceName ?? "skills json"}.");
+
+            if (_byId.ContainsKey(s.Id))
+                throw new InvalidOperationException($"Duplicate skill id '{s.Id}' in {sourceName ?? "skills json"}.");
+
+            s.Name ??= "";
+            s.Description ??= "";
+            s.Tags ??= new();
+            s.Effects ??= new();
+
+            _byId.Add(s.Id, s);
+        }
+    }
 }

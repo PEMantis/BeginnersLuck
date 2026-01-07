@@ -1,13 +1,63 @@
-{
-  "version": 1,
-  "skills": [
-    {
-      "id": "atk_basic",
-      "name": "Attack",
-      "target": "EnemySingle",
-      "mpCost": 0,
-      "effect": "Damage",
-      "formulaId": "atk_basic"
-    }
-  ]
-}
+[
+  {
+    "id": "strike",
+    "name": "Strike",
+    "description": "A basic attack.",
+    "target": "SingleEnemy",
+    "cost": {
+      "resource": "None",
+      "amount": 0
+    },
+    "tags": [
+      "physical",
+      "basic"
+    ],
+    "effects": [
+      {
+        "type": "Damage",
+        "power": 6,
+        "userAtkScale": 1.0,
+        "userMagScale": 0.0,
+        "targetDefScale": 0.5,
+        "targetResScale": 0.0
+      }
+    ]
+  },
+  {
+    "id": "first_aid",
+    "name": "First Aid",
+    "description": "Patch up an ally.",
+    "target": "SingleAlly",
+    "cost": {
+      "resource": "MP",
+      "amount": 3
+    },
+    "tags": [
+      "heal"
+    ],
+    "effects": [
+      {
+        "type": "Heal",
+        "power": 10,
+        "userMagScale": 0.8
+      }
+    ]
+  },
+  {
+    "id": "focus",
+    "name": "Focus",
+    "target": "Self",
+    "cost": {
+      "resource": "None",
+      "amount": 0
+    },
+    "effects": [
+      {
+        "type": "BuffStat",
+        "stat": "Atk",
+        "amount": 4,
+        "durationTurns": 3
+      }
+    ]
+  }
+]

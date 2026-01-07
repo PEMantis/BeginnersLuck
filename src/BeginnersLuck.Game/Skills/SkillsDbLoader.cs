@@ -1,27 +1,28 @@
 using System;
-using System.Collections.Generic;
-using System.Text.Json;
+using BeginnersLuck.Engine.Content;
 
 namespace BeginnersLuck.Game.Skills;
 
 public static class SkillDbLoader
 {
-    private sealed class FileDto
+    /// <summary>
+    /// Loads skills from raw content path. Keep this small and boring.
+    /// </summary>
+    public static SkillDb LoadFromRaw(RawContent raw, string relativePath)
     {
-        public int Version { get; set; } = 1;
-        public List<SkillDef> Skills { get; set; } = new();
+        var json = raw.LoadText(relativePath);
+
+        var db = new SkillDb();
+        db.LoadFromJson(json, relativePath);
+        return db;
     }
+}
 
-    public static SkillDb LoadFromJson(string json)
-    {
-        var file = JsonSerializer.Deserialize<FileDto>(json, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        }) ?? throw new InvalidOperationException("Failed to deserialize skills.json.");
-
-        if (file.Version <= 0)
-            throw new InvalidOperationException("skills.json missing/invalid version.");
-
-        return new SkillDb(file.Skills);
-    }
+/// <summary>
+/// Minimal contract so SkillDb isn't coupled to your specific RawContent type.
+/// If you already have IRawContent, delete this and use yours.
+/// </summary>
+public interface IRawContent
+{
+    string ReadAllText(string path);
 }

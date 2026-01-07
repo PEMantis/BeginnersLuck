@@ -16,6 +16,7 @@ using BeginnersLuck.Game.State;
 using BeginnersLuck.Game.Graphics;
 using BeginnersLuck.Game.Stats;
 using BeginnersLuck.Game.Jobs;
+using BeginnersLuck.Game.Skills;
 namespace BeginnersLuck.Game;
 
 public class Game1 : Microsoft.Xna.Framework.Game
@@ -99,9 +100,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
         party.Members.Add(player);
         var monstersJson = System.Text.Encoding.UTF8.GetString(_raw.LoadBytes("Data/monsters.json"));
         var monsters = BeginnersLuck.Game.Monsters.MonsterDbLoader.LoadFromJson(monstersJson);
-        var skillsJson = System.Text.Encoding.UTF8.GetString(_raw.LoadBytes("Data/skills.json"));
-        var skills = BeginnersLuck.Game.Skills.SkillDbLoader.LoadFromJson(skillsJson);
-        var skillSystem = new BeginnersLuck.Game.Skills.SkillSystem(skills);
+        var skillDb = SkillDbLoader.LoadFromRaw(_raw, "Data/skills.json");
+        var skillSystem = new SkillSystem(skillDb);
 
 
         var px = new Texture2D(GraphicsDevice, 1, 1);
@@ -152,7 +152,7 @@ public class Game1 : Microsoft.Xna.Framework.Game
             party: party,
             stats: stats,
             monsters: monsters,
-            skillDb: skills,
+            skillDb: skillDb,
             skillSystem: skillSystem
         );
 

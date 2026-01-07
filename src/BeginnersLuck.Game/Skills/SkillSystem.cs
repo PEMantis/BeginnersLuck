@@ -1,57 +1,175 @@
 using System;
-using BeginnersLuck.Game.Stats;
+using System.Collections.Generic;
 
 namespace BeginnersLuck.Game.Skills;
 
 public sealed class SkillSystem
 {
-    private readonly SkillDb _skills;
+    private readonly SkillDb _db;
 
-    public SkillSystem(SkillDb skills)
+    public SkillSystem(SkillDb db)
     {
-        _skills = skills ?? throw new ArgumentNullException(nameof(skills));
+        _db = db;
     }
 
-    // Minimal “actor view” so we don’t force BattleScene changes yet.
-    public SkillUseReport UseDamage(
-        string skillId,
-        string attackerName,
-        StatBlock attackerStats,
-        string targetName,
-        StatBlock targetStats,
-        Func<int> getTargetHp,
-        Action<int> setTargetHp,
-        Random rng)
+    public SkillDef GetDef(string id) => _db.Get(id);
+
+    public bool CanUse(ISkillActor user, string skillId, out string reason)
     {
-        var skill = _skills.Get(skillId);
+        var def = _db.Get(skillId);
 
-        // MP cost enforcement will plug in once ActorState is in battle.
-        int dmg = ComputeDamage(skill.FormulaId, attackerStats, targetStats, rng);
+        var cost = def.Cost ?? new SkillCostDef();
 
-        int oldHp = getTargetHp();
-        int newHp = Math.Max(0, oldHp - dmg);
-        setTargetHp(newHp);
-
-        return new SkillUseReport
+        if (cost.Amount <= 0 || cost.Resource == SkillResource.None)
         {
-            SkillId = skill.Id,
-            AttackerName = attackerName,
-            TargetName = targetName,
-            Amount = dmg,
-            TargetDowned = (oldHp > 0 && newHp == 0)
-        };
-    }
+            reason = "";
+            return true;
+        }
 
-    private static int ComputeDamage(string formulaId, StatBlock atk, StatBlock def, Random rng)
-    {
-        int A = Math.Max(0, atk[StatType.Atk]);
-        int D = Math.Max(0, def[StatType.Def]);
-
-        // V1 formulas (expand later)
-        return formulaId switch
+        switch (cost.Resource)
         {
-            "atk_basic" => Math.Max(1, (A - (D / 2)) + rng.Next(-1, 2)),
-            _ => Math.Max(1, (A - (D / 2)) + rng.Next(-1, 2))
-        };
+            case SkillResource.MP:
+                if (user.Mp < cost.Amount)
+                {
+                    reason = "Not enough MP.";
+                    return false;
+                }
+                break;
+
+            case SkillResource.HP:
+                // Don’t allow self-KO via cost (common JRPG rule-of-thumb)
+                if (user.Hp <= cost.Amount)
+                {
+                    reason = "Not enough HP.";
+                    return false;
+                }
+                break;
+
+            default:
+                break;
+        }
+
+        reason = "";
+        return true;
     }
+
+    public SkillResolution Resolve(ISkillActor user, string skillId, IReadOnlyList<ISkillActor> targets)
+    {
+        var def = _db.Get(skillId);
+
+        if (!CanUse(user, skillId, out var reason))
+            throw new InvalidOperationException($"Cannot use skill '{skillId}': {reason}");
+
+        SpendCost(user, def);
+
+        var log = new List<SkillEvent>();
+
+        foreach (var t in targets)
+        {
+            foreach (var fx in def.Effects)
+            {
+                ApplyEffect(user, t, fx, log);
+            }
+        }
+
+        return new SkillResolution(def, log);
+    }
+
+    private static void SpendCost(ISkillActor user, SkillDef def)
+    {
+        var cost = def.Cost;
+        if (cost == null || cost.Amount <= 0 || cost.Resource == SkillResource.None)
+            return;
+
+        if (cost.Resource == SkillResource.MP) user.SpendMp(cost.Amount);
+        else if (cost.Resource == SkillResource.HP) user.SpendHp(cost.Amount);
+    }
+
+    private static void ApplyEffect(ISkillActor user, ISkillActor target, SkillEffectDef fx, List<SkillEvent> log)
+    {
+        switch (fx.Type)
+        {
+            case SkillEffectType.Damage:
+            {
+                var dmg = ComputeDamage(user, target, fx);
+                target.TakeDamage(dmg);
+                log.Add(SkillEvent.Damage(user.DebugName, target.DebugName, dmg));
+                break;
+            }
+
+            case SkillEffectType.Heal:
+            {
+                var heal = ComputeHeal(user, target, fx);
+                target.Heal(heal);
+                log.Add(SkillEvent.Heal(user.DebugName, target.DebugName, heal));
+                break;
+            }
+
+            case SkillEffectType.BuffStat:
+            {
+                if (fx.Stat == null || fx.DurationTurns <= 0 || fx.Amount == 0) break;
+                target.ApplyTimedStatMod(fx.Stat.Value, Math.Abs(fx.Amount), fx.DurationTurns);
+                log.Add(SkillEvent.StatMod(user.DebugName, target.DebugName, fx.Stat.Value, +Math.Abs(fx.Amount), fx.DurationTurns));
+                break;
+            }
+
+            case SkillEffectType.DebuffStat:
+            {
+                if (fx.Stat == null || fx.DurationTurns <= 0 || fx.Amount == 0) break;
+                target.ApplyTimedStatMod(fx.Stat.Value, -Math.Abs(fx.Amount), fx.DurationTurns);
+                log.Add(SkillEvent.StatMod(user.DebugName, target.DebugName, fx.Stat.Value, -Math.Abs(fx.Amount), fx.DurationTurns));
+                break;
+            }
+
+            default:
+                break;
+        }
+    }
+
+    private static int ComputeDamage(ISkillActor user, ISkillActor target, SkillEffectDef fx)
+    {
+        // A very “JRPG core” formula:
+        // base = fx.Power + user(Atk/Mag scaling) - target(Def/Res scaling)
+        // min 1
+        var atk = user.GetStat(StatId.Atk);
+        var mag = user.GetStat(StatId.Mag);
+        var def = target.GetStat(StatId.Def);
+        var res = target.GetStat(StatId.Res);
+
+        var raw =
+            fx.Power
+            + atk * fx.UserAtkScale
+            + mag * fx.UserMagScale
+            - def * fx.TargetDefScale
+            - res * fx.TargetResScale;
+
+        var dmg = (int)MathF.Round(raw);
+        if (dmg < 1) dmg = 1;
+        return dmg;
+    }
+
+    private static int ComputeHeal(ISkillActor user, ISkillActor target, SkillEffectDef fx)
+    {
+        // Heal formula:
+        // base = fx.Power + user(Mag scaling)
+        var mag = user.GetStat(StatId.Mag);
+        var raw = fx.Power + mag * fx.UserMagScale;
+        var heal = (int)MathF.Round(raw);
+        if (heal < 1) heal = 1;
+        return heal;
+    }
+}
+
+public sealed record SkillResolution(SkillDef Def, IReadOnlyList<SkillEvent> Events);
+
+public sealed record SkillEvent(string Kind, string Source, string Target, int Amount, StatId? Stat, int DurationTurns)
+{
+    public static SkillEvent Damage(string src, string tgt, int amt)
+        => new("Damage", src, tgt, amt, null, 0);
+
+    public static SkillEvent Heal(string src, string tgt, int amt)
+        => new("Heal", src, tgt, amt, null, 0);
+
+    public static SkillEvent StatMod(string src, string tgt, StatId stat, int delta, int turns)
+        => new("StatMod", src, tgt, delta, stat, turns);
 }
