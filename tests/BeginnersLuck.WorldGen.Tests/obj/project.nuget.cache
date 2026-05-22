@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "oKv30t4g+xk=",
+  "dgSpecHash": "ob1pGY3RC0Q=",
   "success": true,
-  "projectFilePath": "/home/perry-davis/Documents/BeginnersLuck/tests/BeginnersLuck.WorldGen.Tests/BeginnersLuck.WorldGen.Tests.csproj",
+  "projectFilePath": "/home/perry-davis/dev/BeginnersLuck/tests/BeginnersLuck.WorldGen.Tests/BeginnersLuck.WorldGen.Tests.csproj",
   "expectedPackageFiles": [
     "/home/perry-davis/.nuget/packages/coverlet.collector/6.0.2/coverlet.collector.6.0.2.nupkg.sha512",
     "/home/perry-davis/.nuget/packages/microsoft.codecoverage/17.12.0/microsoft.codecoverage.17.12.0.nupkg.sha512",
@@ -18,7 +18,9 @@
     "/home/perry-davis/.nuget/packages/xunit.core/2.9.2/xunit.core.2.9.2.nupkg.sha512",
     "/home/perry-davis/.nuget/packages/xunit.extensibility.core/2.9.2/xunit.extensibility.core.2.9.2.nupkg.sha512",
     "/home/perry-davis/.nuget/packages/xunit.extensibility.execution/2.9.2/xunit.extensibility.execution.2.9.2.nupkg.sha512",
-    "/home/perry-davis/.nuget/packages/xunit.runner.visualstudio/2.8.2/xunit.runner.visualstudio.2.8.2.nupkg.sha512"
+    "/home/perry-davis/.nuget/packages/xunit.runner.visualstudio/2.8.2/xunit.runner.visualstudio.2.8.2.nupkg.sha512",
+    "/home/perry-davis/.nuget/packages/microsoft.netcore.app.ref/9.0.15/microsoft.netcore.app.ref.9.0.15.nupkg.sha512",
+    "/home/perry-davis/.nuget/packages/microsoft.aspnetcore.app.ref/9.0.15/microsoft.aspnetcore.app.ref.9.0.15.nupkg.sha512"
   ],
   "logs": []
 }

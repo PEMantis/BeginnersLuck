@@ -147,6 +147,6 @@ public sealed class BitmapFont : IFont
 
     public void Dispose()
     {
-        throw new NotImplementedException();
+        // Atlas ownership is external for BitmapFont; disposing here should be a no-op.
     }
 }

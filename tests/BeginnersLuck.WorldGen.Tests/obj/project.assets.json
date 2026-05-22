@@ -964,11 +964,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/home/perry-davis/Documents/BeginnersLuck/tests/BeginnersLuck.WorldGen.Tests/BeginnersLuck.WorldGen.Tests.csproj",
+      "projectUniqueName": "/home/perry-davis/dev/BeginnersLuck/tests/BeginnersLuck.WorldGen.Tests/BeginnersLuck.WorldGen.Tests.csproj",
       "projectName": "BeginnersLuck.WorldGen.Tests",
-      "projectPath": "/home/perry-davis/Documents/BeginnersLuck/tests/BeginnersLuck.WorldGen.Tests/BeginnersLuck.WorldGen.Tests.csproj",
+      "projectPath": "/home/perry-davis/dev/BeginnersLuck/tests/BeginnersLuck.WorldGen.Tests/BeginnersLuck.WorldGen.Tests.csproj",
       "packagesPath": "/home/perry-davis/.nuget/packages/",
-      "outputPath": "/home/perry-davis/Documents/BeginnersLuck/tests/BeginnersLuck.WorldGen.Tests/obj/",
+      "outputPath": "/home/perry-davis/dev/BeginnersLuck/tests/BeginnersLuck.WorldGen.Tests/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "/home/perry-davis/.nuget/NuGet/NuGet.Config"
@@ -984,8 +984,8 @@
         "net9.0": {
           "targetAlias": "net9.0",
           "projectReferences": {
-            "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj": {
-              "projectPath": "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj"
+            "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj": {
+              "projectPath": "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj"
             }
           }
         }
@@ -1000,7 +1000,7 @@
         "auditLevel": "low",
         "auditMode": "direct"
       },
-      "SdkAnalysisLevel": "9.0.300"
+      "SdkAnalysisLevel": "10.0.200"
     },
     "frameworks": {
       "net9.0": {
@@ -1034,12 +1034,22 @@
         ],
         "assetTargetFallback": true,
         "warn": true,
+        "downloadDependencies": [
+          {
+            "name": "Microsoft.AspNetCore.App.Ref",
+            "version": "[9.0.15, 9.0.15]"
+          },
+          {
+            "name": "Microsoft.NETCore.App.Ref",
+            "version": "[9.0.15, 9.0.15]"
+          }
+        ],
         "frameworkReferences": {
           "Microsoft.NETCore.App": {
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "/home/perry-davis/.dotnet/sdk/9.0.308/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "/home/perry-davis/.dotnet/sdk/10.0.203/PortableRuntimeIdentifierGraph.json"
       }
     }
   }

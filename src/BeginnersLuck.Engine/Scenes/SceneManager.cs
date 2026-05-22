@@ -10,8 +10,8 @@ public sealed class SceneManager
 {
     private readonly List<IScene> _stack = new();
 
-    private GraphicsDevice _graphicsDevice = null!;
-    private ContentManager _content = null!;
+    private GraphicsDevice? _graphicsDevice;
+    private ContentManager? _content;
 
     // Optional hook invoked after any stack transition (Replace/Push/Pop).
     // Game1 can set this to consume input, play sounds, etc.
@@ -29,8 +29,16 @@ public sealed class SceneManager
     // Backwards compatible name (your old code calls Switch)
     public void Switch(IScene scene) => Replace(scene);
 
+    private void EnsureConfigured()
+    {
+        if (_graphicsDevice == null || _content == null)
+            throw new InvalidOperationException("SceneManager.Configure must be called before Replace/Push.");
+    }
+
     public void Replace(IScene scene)
     {
+        EnsureConfigured();
+
         // unload everything
         for (int i = _stack.Count - 1; i >= 0; i--)
             _stack[i].Unload();
@@ -38,15 +46,17 @@ public sealed class SceneManager
         _stack.Clear();
 
         _stack.Add(scene);
-        scene.Load(_graphicsDevice, _content);
+        scene.Load(_graphicsDevice!, _content!);
 
         OnTransition?.Invoke();
     }
 
     public void Push(IScene scene)
     {
+        EnsureConfigured();
+
         _stack.Add(scene);
-        scene.Load(_graphicsDevice, _content);
+        scene.Load(_graphicsDevice!, _content!);
 
         OnTransition?.Invoke();
     }

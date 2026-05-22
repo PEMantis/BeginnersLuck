@@ -14,12 +14,6 @@ namespace BeginnersLuck.Game.Scenes;
 
 public sealed class MenuHubScene : PanelSceneBase
 {
-    private enum HubFocus
-    {
-        Tabs,
-        Page
-    }
-
     private readonly List<IMenuPage> _pages = new();
     private int _tabIndex;
 
@@ -29,7 +23,6 @@ public sealed class MenuHubScene : PanelSceneBase
 
     // Focus state
     private bool _focusTabs = true;
-    private HubFocus _focus = HubFocus.Tabs;
 
     public MenuHubScene(GameServices s, Microsoft.Xna.Framework.Input.KeyboardState keyboard, int startTab = 0)
         : base(
@@ -66,7 +59,6 @@ public sealed class MenuHubScene : PanelSceneBase
             _pages[_tabIndex].OnEnter(S);
 
         _focusTabs = true;
-        _focus = HubFocus.Tabs;
     }
 
     protected override void OnUnload()

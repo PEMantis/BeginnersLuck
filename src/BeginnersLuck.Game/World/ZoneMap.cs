@@ -65,7 +65,7 @@ public sealed class ZoneMap
             for (int bx = 0; bx < blocksX; bx++)
             {
                 blockZones[by * blocksX + bx] =
-                    PickZoneForBlock(bx, by, zoneSizeCells, getTileId, rng);
+                    PickZoneForBlock(bx, by, zoneSizeCells, width, height, getTileId, rng);
             }
 
         // Expand blocks to cells
@@ -84,12 +84,14 @@ public sealed class ZoneMap
         int blockX,
         int blockY,
         int blockSize,
+        int width,
+        int height,
         Func<int, int, int> getTileId,
         Random rng)
     {
         // Sample center tile of block (simple, stable)
-        int sampleX = blockX * blockSize + blockSize / 2;
-        int sampleY = blockY * blockSize + blockSize / 2;
+        int sampleX = Math.Clamp(blockX * blockSize + blockSize / 2, 0, width - 1);
+        int sampleY = Math.Clamp(blockY * blockSize + blockSize / 2, 0, height - 1);
 
         int tileId = getTileId(sampleX, sampleY);
 

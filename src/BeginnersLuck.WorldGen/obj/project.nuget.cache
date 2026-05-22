@@ -1,8 +1,11 @@
 {
   "version": 2,
-  "dgSpecHash": "oJ4oPLNS8NQ=",
+  "dgSpecHash": "w2PMDM/5GI8=",
   "success": true,
-  "projectFilePath": "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj",
-  "expectedPackageFiles": [],
+  "projectFilePath": "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj",
+  "expectedPackageFiles": [
+    "/home/perry-davis/.nuget/packages/microsoft.netcore.app.ref/9.0.15/microsoft.netcore.app.ref.9.0.15.nupkg.sha512",
+    "/home/perry-davis/.nuget/packages/microsoft.aspnetcore.app.ref/9.0.15/microsoft.aspnetcore.app.ref.9.0.15.nupkg.sha512"
+  ],
   "logs": []
 }

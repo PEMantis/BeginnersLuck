@@ -19,12 +19,14 @@ public sealed class CharacterPage : IMenuPage
 
     public void Update(GameServices s, in UpdateContext uc)
     {
+#if DEBUG
         // Debug XP grants
         if (uc.Actions.Pressed(uc.Input, Microsoft.Xna.Framework.Input.Keys.F1))
             s.Player.AddXp(10);
 
         if (uc.Actions.Pressed(uc.Input, Microsoft.Xna.Framework.Input.Keys.F2))
             s.Player.AddXp(50);
+#endif
     }
 
     public void Draw(GameServices s, SpriteBatch sb, Rectangle contentRect, float timeSeconds)

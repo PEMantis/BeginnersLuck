@@ -59,12 +59,10 @@ public sealed class WorldMapScene : SceneBase
     private Dir _lastWorldMoveDir = Dir.North;
     private readonly CameraZoom.State _zoom = new() { MinZoom = 0.5f, MaxZoom = 3.0f, Step = 0.12f };
     private float _lastEncounterChance;
-    private ZoneInfo _lastZone;
+    private ZoneInfo _lastZone = new(ZoneId.None, danger: 0, encounterTableId: "none");
     private int _debugMoves;
     private int _debugRolls;
-    private int _debugStarts;
     private double _debugLastRoll;
-    private bool _debugTriedThisStep;
 
     // ---- Props overlay (SpriteDb, no atlas) ----
     private readonly Dictionary<Point, List<WorldProp>> _propChunks = new();
@@ -83,7 +81,7 @@ public sealed class WorldMapScene : SceneBase
 
         _propChunks.Clear();
         _propBlocked.Clear();
-       
+
 
         int seed = _s.World.WorldSeed;
         string worldJson = WorldPaths.WorldJsonPath(seed);
@@ -112,19 +110,19 @@ public sealed class WorldMapScene : SceneBase
             int baseY = ch.Cy * cs;
 
             for (int ly = 0; ly < cs; ly++)
-            for (int lx = 0; lx < cs; lx++)
-            {
-                int local = lx + ly * cs;
-                int wx = baseX + lx;
-                int wy = baseY + ly;
+                for (int lx = 0; lx < cs; lx++)
+                {
+                    int local = lx + ly * cs;
+                    int wx = baseX + lx;
+                    int wy = baseY + ly;
 
-                if ((uint)wx >= (uint)w || (uint)wy >= (uint)h)
-                    continue;
+                    if ((uint)wx >= (uint)w || (uint)wy >= (uint)h)
+                        continue;
 
-                int i = wx + wy * w;
+                    int i = wx + wy * w;
 
-                _terrainFlat[i] = (byte)ch.Terrain[local];
-                _flagsFlat[i] = (ushort)ch.Flags[local];
+                    _terrainFlat[i] = (byte)ch.Terrain[local];
+                    _flagsFlat[i] = (ushort)ch.Flags[local];
                 }
         }
 
@@ -194,7 +192,6 @@ public sealed class WorldMapScene : SceneBase
 
         var ks = Keyboard.GetState();
         var pad = GamePad.GetState(PlayerIndex.One);
-        _debugTriedThisStep = false;
 
         // Encounter toast active: tick + block input
         if (_toastActive)
@@ -252,8 +249,6 @@ public sealed class WorldMapScene : SceneBase
             else if (Pressed(pad, Buttons.DPadRight)) dir = new Point(1, 0);
         }
 
-        bool moved = false;
-
         if (dir != Point.Zero)
         {
             var next = _playerCell + dir;
@@ -263,9 +258,7 @@ public sealed class WorldMapScene : SceneBase
                 if (!IsBlocked(next))
                 {
                     _playerCell = next;
-                    moved = true;
                     _debugMoves++;
-                    _debugTriedThisStep = true;
 
                     int idx = _playerCell.X + _playerCell.Y * _world!.Width;
                     var tid = (TileId)_terrainFlat![idx];
@@ -278,7 +271,7 @@ public sealed class WorldMapScene : SceneBase
                     _debugLastRoll = _s.Rng.NextDouble();
 
                     // Encounters: only roll when a move actually happened
-                   var intent = _s.EncounterDirector.OnPlayerMoved(_playerCell, _lastZone, _s.Rng);
+                    var intent = _s.EncounterDirector.OnPlayerMoved(_playerCell, _lastZone, _s.Rng);
 
                     if (intent.HasValue)
                     {
@@ -472,15 +465,14 @@ public sealed class WorldMapScene : SceneBase
             int idx = _playerCell.X + _playerCell.Y * _world.Width;
             var tid = (TileId)_terrainFlat[idx];
             bool propBlocked = _propBlocked.Contains(_playerCell);
-            
+
 
             _s.UiFont.Draw(sb,
-                $"WORLD: {_playerCell.X},{_playerCell.Y} {tid} flags={_flagsFlat[idx]} solid={_map.IsSolidCell(_playerCell.X,_playerCell.Y)} propBlock={propBlocked}",
+                $"WORLD: {_playerCell.X},{_playerCell.Y} {tid} flags={_flagsFlat[idx]} solid={_map.IsSolidCell(_playerCell.X, _playerCell.Y)} propBlock={propBlocked}",
                 new Vector2(hud.X + 8, hud.Y + 32),
                 Color.White * 0.75f, 1);
         }
 
-        if(_lastZone != null)
         _s.UiFont.Draw(sb,
             $"ZONE: {_lastZone.Id} danger={_lastZone.Danger} table={_lastZone.EncounterTableId} chance={_lastEncounterChance:P0}",
             new Vector2(hud.X + 8, hud.Y + 44),
@@ -505,7 +497,7 @@ public sealed class WorldMapScene : SceneBase
 
     // ---------------- POI / Enter logic ----------------
 
- 
+
 
 
     // ---------------- Collision ----------------
@@ -578,37 +570,37 @@ public sealed class WorldMapScene : SceneBase
         int maxCy = maxTy / PropChunkSizeTiles;
 
         for (int cy = minCy; cy <= maxCy; cy++)
-        for (int cx = minCx; cx <= maxCx; cx++)
-        {
-            var key = new Point(cx, cy);
-
-            if (!_propChunks.TryGetValue(key, out var props))
+            for (int cx = minCx; cx <= maxCx; cx++)
             {
-                props = GeneratePropChunk(cx, cy);
-                _propChunks[key] = props;
+                var key = new Point(cx, cy);
+
+                if (!_propChunks.TryGetValue(key, out var props))
+                {
+                    props = GeneratePropChunk(cx, cy);
+                    _propChunks[key] = props;
+
+                    for (int i = 0; i < props.Count; i++)
+                        if (props[i].BlocksMove) _propBlocked.Add(props[i].Tile);
+                }
 
                 for (int i = 0; i < props.Count; i++)
-                    if (props[i].BlocksMove) _propBlocked.Add(props[i].Tile);
+                {
+                    var p = props[i];
+
+                    if (p.Tile.X < minTx || p.Tile.X > maxTx || p.Tile.Y < minTy || p.Tile.Y > maxTy)
+                        continue;
+
+                    if (!_s.Sprites.TryGet(p.SpriteId, out var tex, out var origin))
+                        continue;
+
+                    var tl = _map.CellToWorldTopLeft(p.Tile);
+
+                    // sit on ground: bottom-center of tile
+                    var pos = new Vector2(tl.X + 16, tl.Y + 32) + Jitter(p.Tile);
+
+                    sb.Draw(tex, pos, null, Color.White, 0f, origin, 1f, SpriteEffects.None, 0f);
+                }
             }
-
-            for (int i = 0; i < props.Count; i++)
-            {
-                var p = props[i];
-
-                if (p.Tile.X < minTx || p.Tile.X > maxTx || p.Tile.Y < minTy || p.Tile.Y > maxTy)
-                    continue;
-
-                if (!_s.Sprites.TryGet(p.SpriteId, out var tex, out var origin))
-                    continue;
-
-                var tl = _map.CellToWorldTopLeft(p.Tile);
-
-                // sit on ground: bottom-center of tile
-                var pos = new Vector2(tl.X + 16, tl.Y + 32) + Jitter(p.Tile);
-
-                sb.Draw(tex, pos, null, Color.White, 0f, origin, 1f, SpriteEffects.None, 0f);
-            }
-        }
     }
 
     private void DrawWorldPois(SpriteBatch sb, Rectangle view)
@@ -737,11 +729,11 @@ public sealed class WorldMapScene : SceneBase
         var props = new List<WorldProp>(96);
 
         for (int y = startY; y < endY; y++)
-        for (int x = startX; x < endX; x++)
-        {
-            // Avoid solid terrain cells
-            if (_map.IsSolidCell(x, y))
-                continue;
+            for (int x = startX; x < endX; x++)
+            {
+                // Avoid solid terrain cells
+                if (_map.IsSolidCell(x, y))
+                    continue;
 
                 int idx = x + y * w;
                 var tid = (TileId)_terrainFlat[idx];
@@ -755,54 +747,54 @@ public sealed class WorldMapScene : SceneBase
 
                 var zone = ZoneResolver.ResolveFrom(tid, flags);
 
-            int tileSeed = Hash(seed, x, y);
-            var rng = new Random(tileSeed);
+                int tileSeed = Hash(seed, x, y);
+                var rng = new Random(tileSeed);
 
-            string? sprite = null;
-            bool blocks = false;
+                string? sprite = null;
+                bool blocks = false;
 
-            switch (zone.Id)
-            {
-                case ZoneId.Forest:
+                switch (zone.Id)
                 {
-                    int r = rng.Next(100);
-                    if (r < 18) { sprite = "world.tree"; blocks = true; }
-                    else if (r < 23) { sprite = "world.rock"; blocks = false; }
-                    break;
+                    case ZoneId.Forest:
+                        {
+                            int r = rng.Next(100);
+                            if (r < 18) { sprite = "world.tree"; blocks = true; }
+                            else if (r < 23) { sprite = "world.rock"; blocks = false; }
+                            break;
+                        }
+
+                    case ZoneId.Grasslands:
+                    case ZoneId.Plains:
+                        {
+                            int r = rng.Next(100);
+                            if (r < 5) { sprite = "world.tree"; blocks = true; }
+                            else if (r < 8) { sprite = "world.rock"; blocks = false; }
+                            break;
+                        }
+
+                    case ZoneId.Mountains:
+                        {
+                            int r = rng.Next(100);
+                            if (r < 14) { sprite = "world.mountain"; blocks = true; }
+                            else if (r < 22) { sprite = "world.rock"; blocks = true; }
+                            break;
+                        }
+
+                    case ZoneId.Ruins:
+                        {
+                            int r = rng.Next(100);
+                            if (r < 10) { sprite = "world.ruin_pillar"; blocks = true; }
+                            else if (r < 14) { sprite = "world.rock"; blocks = false; }
+                            break;
+                        }
+
+                    default:
+                        break;
                 }
 
-                case ZoneId.Grasslands:
-                case ZoneId.Plains:
-                {
-                    int r = rng.Next(100);
-                    if (r < 5) { sprite = "world.tree"; blocks = true; }
-                    else if (r < 8) { sprite = "world.rock"; blocks = false; }
-                    break;
-                }
-
-                case ZoneId.Mountains:
-                {
-                    int r = rng.Next(100);
-                    if (r < 14) { sprite = "world.mountain"; blocks = true; }
-                    else if (r < 22) { sprite = "world.rock"; blocks = true; }
-                    break;
-                }
-
-                case ZoneId.Ruins:
-                {
-                    int r = rng.Next(100);
-                    if (r < 10) { sprite = "world.ruin_pillar"; blocks = true; }
-                    else if (r < 14) { sprite = "world.rock"; blocks = false; }
-                    break;
-                }
-
-                default:
-                    break;
+                if (sprite != null)
+                    props.Add(new WorldProp(sprite, new Point(x, y), blocks));
             }
-
-            if (sprite != null)
-                props.Add(new WorldProp(sprite, new Point(x, y), blocks));
-        }
 
         // back-to-front draw (lower Y drawn later looks "in front")
         props.Sort((a, b) => a.Tile.Y.CompareTo(b.Tile.Y));
@@ -811,7 +803,7 @@ public sealed class WorldMapScene : SceneBase
 
     // ---------------- Generation: POIs ----------------
 
-  
+
 
     // ---------------- Utility ----------------
 
@@ -1074,7 +1066,7 @@ public sealed class WorldMapScene : SceneBase
             0.9f);
     }
 
-       /// <summary>
+    /// <summary>
     /// Keeps the loaded _world DTO in sync with _flagsFlat for the specific cell.
     /// This matters if you later rebuild _flagsFlat from _world.Chunks again.
     /// Safe no-op if _world is null.
@@ -1108,7 +1100,7 @@ public sealed class WorldMapScene : SceneBase
         }
     }
 
-    
+
     private PoiType CurrentPoiType()
     {
         if (_world == null || _terrainFlat == null || _flagsFlat == null) return PoiType.None;

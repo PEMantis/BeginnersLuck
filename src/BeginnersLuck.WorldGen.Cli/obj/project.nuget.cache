@@ -1,10 +1,13 @@
 {
   "version": 2,
-  "dgSpecHash": "A2z1MEO6Huo=",
+  "dgSpecHash": "XffzpHVpsFU=",
   "success": true,
-  "projectFilePath": "/home/perry-davis/Documents/BeginnersLuck/src/BeginnersLuck.WorldGen.Cli/BeginnersLuck.WorldGen.Cli.csproj",
+  "projectFilePath": "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.WorldGen.Cli/BeginnersLuck.WorldGen.Cli.csproj",
   "expectedPackageFiles": [
-    "/home/perry-davis/.nuget/packages/sixlabors.imagesharp/3.1.12/sixlabors.imagesharp.3.1.12.nupkg.sha512"
+    "/home/perry-davis/.nuget/packages/sixlabors.imagesharp/3.1.12/sixlabors.imagesharp.3.1.12.nupkg.sha512",
+    "/home/perry-davis/.nuget/packages/microsoft.netcore.app.ref/9.0.15/microsoft.netcore.app.ref.9.0.15.nupkg.sha512",
+    "/home/perry-davis/.nuget/packages/microsoft.aspnetcore.app.ref/9.0.15/microsoft.aspnetcore.app.ref.9.0.15.nupkg.sha512",
+    "/home/perry-davis/.nuget/packages/microsoft.netcore.app.host.linux-x64/9.0.15/microsoft.netcore.app.host.linux-x64.9.0.15.nupkg.sha512"
   ],
   "logs": []
 }
