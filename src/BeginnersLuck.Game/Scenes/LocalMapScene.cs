@@ -1,13 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using BeginnersLuck.Engine.Graphics;
 using BeginnersLuck.Engine.Rendering;
 using BeginnersLuck.Engine.Scenes;
 using BeginnersLuck.Engine.UI;
 using BeginnersLuck.Engine.Update;
 using BeginnersLuck.Engine.World;
+using BeginnersLuck.Game.Assets;
 using BeginnersLuck.Game.Services;
+using BeginnersLuck.Game.Graphics;
 using BeginnersLuck.Game.State;
+using BeginnersLuck.Game.UI;
 using BeginnersLuck.Game.World;
 using BeginnersLuck.WorldGen.Data;
 using BeginnersLuck.WorldGen.Local;
@@ -40,6 +44,16 @@ public sealed class LocalMapScene : SceneBase
     private readonly CameraZoom.State _zoom = new() { MinZoom = 0.5f, MaxZoom = 4.0f, Step = 0.12f };
     private Point? _townCenter;
 
+    private readonly EntityManager _entities = new();
+    private readonly LocalMapCombatSystem _combat = new();
+    private readonly SimpleEnemyAISystem _enemyAi = new();
+    private readonly MessageLog _messageLog = new(capacity: 9);
+    private readonly HashSet<string> _missingEntitySpriteLogged = new(StringComparer.OrdinalIgnoreCase);
+
+    private Point _facing = new(0, 1);
+    private bool _showInventory;
+    private int _inventoryScroll;
+
     public LocalMapScene(GameServices s, string mapBinPath, LocalMapPurpose purpose, SpawnRequest spawn)
     {
         _s = s ?? throw new ArgumentNullException(nameof(s));
@@ -70,9 +84,9 @@ public sealed class LocalMapScene : SceneBase
 
         // Collision
         for (int y = 0; y < n; y++)
-        for (int x = 0; x < n; x++)
-        {
-            int i = x + y * n;
+            for (int x = 0; x < n; x++)
+            {
+                int i = x + y * n;
 
                 var tid = _local.Terrain[i];
                 var flags = _local.Flags[i];
@@ -84,7 +98,7 @@ public sealed class LocalMapScene : SceneBase
 
 
                 _map.SetSolidCell(x, y, solid);
-        }
+            }
 
         var edgeReach = ComputeReachableFromEdge(_map);
 
@@ -97,11 +111,28 @@ public sealed class LocalMapScene : SceneBase
         if (_map.IsSolidCell(_playerCell.X, _playerCell.Y))
             _playerCell = FindNearestWalkableInMask(_map, _playerCell, edgeReach);
 
+        _facing = new Point(0, 1);
+        _showInventory = false;
+        _inventoryScroll = 0;
+        _entities.Clear();
+        _messageLog.Add("Entered local area.");
+
+        LocalEntitySpawner.SpawnDefaults(
+            entities: _entities,
+            map: _map,
+            playerTile: _playerCell,
+            townCenter: _townCenter,
+            seed: _local.Seed ^ (_local.WorldX * 397) ^ _local.WorldY);
+
+        _messageLog.Add("World Interaction v1 active.");
+
         _cam.Position = _map.CellToWorldCenter(_playerCell);
     }
 
     public override void Unload()
     {
+        _entities.Clear();
+
         _local = null;
         _map = null;
         _tileset = null;
@@ -115,6 +146,15 @@ public sealed class LocalMapScene : SceneBase
         var ks = Keyboard.GetState();
         var pad = GamePad.GetState(PlayerIndex.One);
 
+
+        // Debug: Sprite sheet inspector (always available)
+        if (Pressed(ks, Keys.F12))
+        {
+            _s.Scenes.Push(new SpriteSheetInspectorScene(_s));
+            _prevKs = ks;
+            _prevPad = pad;
+            return;
+        }
         // Back without travel
         if (Pressed(ks, Keys.Escape) || Pressed(pad, Buttons.B))
         {
@@ -140,8 +180,42 @@ public sealed class LocalMapScene : SceneBase
             else if (Pressed(pad, Buttons.DPadRight)) dir = new Point(1, 0);
         }
 
+        bool interactPressed =
+            Pressed(pad, Buttons.A) ||
+            Pressed(ks, Keys.Enter) ||
+            Pressed(ks, Keys.Space) ||
+            Pressed(ks, Keys.E);
+
+        bool attackPressed = Pressed(ks, Keys.F) || Pressed(pad, Buttons.X);
+        bool toggleInventoryPressed = Pressed(ks, Keys.I) || Pressed(ks, Keys.Tab) || Pressed(pad, Buttons.Y);
+
+        if (toggleInventoryPressed)
+        {
+            _showInventory = !_showInventory;
+            _prevKs = ks;
+            _prevPad = pad;
+            return;
+        }
+
+        if (_showInventory)
+        {
+            if (Pressed(ks, Keys.Up) || Pressed(ks, Keys.W) || Pressed(pad, Buttons.DPadUp))
+                _inventoryScroll = Math.Max(0, _inventoryScroll - 1);
+
+            if (Pressed(ks, Keys.Down) || Pressed(ks, Keys.S) || Pressed(pad, Buttons.DPadDown))
+                _inventoryScroll++;
+
+            _prevKs = ks;
+            _prevPad = pad;
+            return;
+        }
+
+        bool playerTurnConsumed = false;
+
         if (dir != Point.Zero)
         {
+            _facing = dir;
+
             var next = _playerCell + dir;
 
             // Edge exit attempt
@@ -174,32 +248,73 @@ public sealed class LocalMapScene : SceneBase
 
                 _s.Toasts.Push("No exit here.", 0.35f);
             }
+            else if (!_map.IsSolidCell(next.X, next.Y) && !_entities.IsTileBlocked(next))
+            {
+                _playerCell = next;
+                playerTurnConsumed = true;
+            }
             else
             {
-                if (!_map.IsSolidCell(next.X, next.Y))
-                    _playerCell = next;
+                _s.Toasts.Push("Blocked.", 0.35f);
             }
         }
 
-        // Town Center interaction (gate that opens TownScene)
-        if (_townCenter.HasValue)
+        // Interaction targeting: current tile, facing tile, then adjacent fallback.
+        if (interactPressed)
         {
-            var tc = _townCenter.Value;
-
-            bool onTownCenter = _playerCell.X == tc.X && _playerCell.Y == tc.Y;
-
-            bool interact =
-                Pressed(pad, Buttons.A) ||
-                Pressed(ks, Keys.Enter) ||
-                Pressed(ks, Keys.Space) ||
-                Pressed(ks, Keys.E);
-
-            if (onTownCenter && interact)
+            if (_townCenter.HasValue && _playerCell == _townCenter.Value)
             {
                 _s.Scenes.Push(new TownScene(_s, new Point(_local.WorldX, _local.WorldY)));
                 _prevKs = ks;
                 _prevPad = pad;
                 return;
+            }
+
+            if (InteractionSystem.TryInteract(
+                entities: _entities,
+                playerTile: _playerCell,
+                facing: _facing,
+                player: _s.Player,
+                items: _s.Items,
+                rng: _s.Rng,
+                log: Log,
+                out bool consumedInteractTurn))
+            {
+                playerTurnConsumed |= consumedInteractTurn;
+            }
+            else
+            {
+                Log("Nothing to interact with.");
+            }
+        }
+
+        if (attackPressed)
+        {
+            if (_combat.TryPlayerAttack(_entities, _playerCell, _facing, _s.Player, _s.Items, _s.Rng, Log))
+                playerTurnConsumed = true;
+            else
+                Log("No enemy in range.");
+        }
+
+#if DEBUG
+        if (Pressed(ks, Keys.F8))
+        {
+            _s.Player.Inventory.AddItem("berries", 3, _s.Items);
+            _s.Player.Inventory.AddItem("wood", 2, _s.Items);
+            _s.Player.Inventory.AddItem("health_herb", 1, _s.Items);
+            Log("DEBUG: Granted test item bundle.");
+        }
+#endif
+
+        if (playerTurnConsumed)
+        {
+            _enemyAi.RunTurn(_entities, _map, _playerCell, _s.Player, _s.Rng, Log);
+
+            if (_s.Player.Hp <= 0)
+            {
+                Log("You were defeated. Recovering...");
+                _s.Player.HealToFull();
+                _playerCell = ResolveSpawnEscapable(_map, _local, _spawn, ComputeReachableFromEdge(_map));
             }
         }
 
@@ -216,6 +331,8 @@ public sealed class LocalMapScene : SceneBase
     {
         if (_map == null || _mapRenderer == null || _local == null) return;
 
+        var targetInfo = GetCurrentTargetInfo();
+
         var sb = rc.SpriteBatch;
 
         sb.Begin(
@@ -230,42 +347,46 @@ public sealed class LocalMapScene : SceneBase
             PixelRenderer.InternalHeight);
 
         _mapRenderer.Draw(sb, _map, view);
+        // TODO: Terrain Sprite Rendering v1 (disabled for now).
+        // Cainos sheet source rectangles need proper atlas inspection before re-enabling.
+        // Until then, terrain falls back to debug color rendering from TileMapRenderer.
+        // if (UseAssetTerrainTiles) DrawTerrainSprites(sb, view);
 
         // Overlays (roads/rivers)
         int n = _local.Size;
         for (int y = 0; y < n; y++)
-        for (int x = 0; x < n; x++)
-        {
-            int i = x + y * n;
-            var f = _local.Flags[i];
-            if (f == TileFlags.None) continue;
-
-            var tl = _map.CellToWorldTopLeft(new Point(x, y));
-
-            if ((f & TileFlags.Road) != 0)
+            for (int x = 0; x < n; x++)
             {
-                var mask = NeighborMask(_local, x, y, TileFlags.Road);
+                int i = x + y * n;
+                var f = _local.Flags[i];
+                if (f == TileFlags.None) continue;
 
-                sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 6, 4, 4), Color.SaddleBrown);
+                var tl = _map.CellToWorldTopLeft(new Point(x, y));
 
-                if (mask.HasFlag(NMask.North)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 7, (int)tl.Y + 0, 2, 6), Color.SaddleBrown);
-                if (mask.HasFlag(NMask.South)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 7, (int)tl.Y + 10, 2, 6), Color.SaddleBrown);
-                if (mask.HasFlag(NMask.West)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 0, (int)tl.Y + 7, 6, 2), Color.SaddleBrown);
-                if (mask.HasFlag(NMask.East)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 10, (int)tl.Y + 7, 6, 2), Color.SaddleBrown);
+                if ((f & TileFlags.Road) != 0)
+                {
+                    var mask = NeighborMask(_local, x, y, TileFlags.Road);
+
+                    sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 6, 4, 4), Color.SaddleBrown);
+
+                    if (mask.HasFlag(NMask.North)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 7, (int)tl.Y + 0, 2, 6), Color.SaddleBrown);
+                    if (mask.HasFlag(NMask.South)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 7, (int)tl.Y + 10, 2, 6), Color.SaddleBrown);
+                    if (mask.HasFlag(NMask.West)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 0, (int)tl.Y + 7, 6, 2), Color.SaddleBrown);
+                    if (mask.HasFlag(NMask.East)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 10, (int)tl.Y + 7, 6, 2), Color.SaddleBrown);
+                }
+
+                if ((f & TileFlags.River) != 0)
+                {
+                    var mask = NeighborMask(_local, x, y, TileFlags.River);
+
+                    sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 6, 4, 4), Color.CornflowerBlue);
+
+                    if (mask.HasFlag(NMask.North)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 0, 4, 6), Color.CornflowerBlue);
+                    if (mask.HasFlag(NMask.South)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 10, 4, 6), Color.CornflowerBlue);
+                    if (mask.HasFlag(NMask.West)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 0, (int)tl.Y + 6, 6, 4), Color.CornflowerBlue);
+                    if (mask.HasFlag(NMask.East)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 10, (int)tl.Y + 6, 6, 4), Color.CornflowerBlue);
+                }
             }
-
-            if ((f & TileFlags.River) != 0)
-            {
-                var mask = NeighborMask(_local, x, y, TileFlags.River);
-
-                sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 6, 4, 4), Color.CornflowerBlue);
-
-                if (mask.HasFlag(NMask.North)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 0, 4, 6), Color.CornflowerBlue);
-                if (mask.HasFlag(NMask.South)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 6, (int)tl.Y + 10, 4, 6), Color.CornflowerBlue);
-                if (mask.HasFlag(NMask.West)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 0, (int)tl.Y + 6, 6, 4), Color.CornflowerBlue);
-                if (mask.HasFlag(NMask.East)) sb.Draw(_s.PixelWhite, new Rectangle((int)tl.X + 10, (int)tl.Y + 6, 6, 4), Color.CornflowerBlue);
-            }
-        }
 
         // Town center marker (readable plaza tile)
         if (_townCenter.HasValue)
@@ -286,6 +407,11 @@ public sealed class LocalMapScene : SceneBase
             sb.Draw(_s.PixelWhite, new Rectangle(r.X + r.Width / 2 - 2, r.Y + r.Height / 2 - 2, 4, 4), Color.Gold * 0.95f);
         }
 
+        DrawInteractionHighlight(sb, targetInfo);
+
+        // Entities
+        DrawEntities(sb, targetInfo);
+
         // Player marker
         var pos = _map.CellToWorldTopLeft(_playerCell);
         sb.Draw(_s.PixelWhite, new Rectangle((int)pos.X + 10, (int)pos.Y + 10, 12, 12), Color.Gold);
@@ -297,38 +423,92 @@ public sealed class LocalMapScene : SceneBase
     {
         if (_local == null || _map == null) return;
 
+        var targetInfo = GetCurrentTargetInfo();
+
         var sb = rc.SpriteBatch;
         sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
-
-        int n = _local.Size;
-        int i = _playerCell.X + _playerCell.Y * n;
 
         _s.UiFont.Draw(sb, $"LOCAL {_local.Size}x{_local.Size} ({_local.WorldX},{_local.WorldY})  {_purpose}",
             new Vector2(8, 8), Color.White * 0.9f, 1);
 
-        _s.UiFont.Draw(sb, "ESC/B: back  |  Walk off edge to exit",
+        _s.UiFont.Draw(sb, "ESC/B: back  |  E/A: interact  |  F/X: attack",
             new Vector2(8, 18), Color.White * 0.7f, 1);
 
         _s.UiFont.Draw(sb,
-            $"P: {_playerCell.X},{_playerCell.Y} solid={_map.IsSolidCell(_playerCell.X,_playerCell.Y)} tileIndex={_map.GetTileId(_playerCell.X,_playerCell.Y)} terrain={_local.Terrain[i]} flags={_local.Flags[i]}",
+            $"P: {_playerCell.X},{_playerCell.Y} HP={_s.Player.Hp}/{_s.Player.MaxHp} entities={_entities.Entities.Count}",
             new Vector2(8, 28), Color.White * 0.85f, 1);
 
+        var front = _playerCell + _facing;
         _s.UiFont.Draw(sb,
-            _townCenter.HasValue ? $"TownCenter: {_townCenter.Value.X},{_townCenter.Value.Y}"
-                                 : "TownCenter: (none)",
+            $"Facing: {_facing.X},{_facing.Y} front={front.X},{front.Y}",
             new Vector2(8, 38), Color.White * 0.75f, 1);
 
-        // Interaction prompt when standing on it
-        if (_townCenter.HasValue && _playerCell == _townCenter.Value)
-        {
-            const string prompt = "A / Enter / Space / E: Enter Town";
-            int y = PixelRenderer.InternalHeight - 22;
+        _s.UiFont.Draw(sb, "I/TAB/Y: Inventory", new Vector2(8, 48), Color.White * 0.68f, 1);
 
-            sb.Draw(_s.PixelWhite, new Rectangle(6, y - 4, 220, 18), new Color(10, 10, 18) * 0.75f);
-            _s.UiFont.Draw(sb, prompt, new Vector2(12, y), Color.Gold * 0.95f, 1);
+        var hpHud = new Rectangle(PixelRenderer.InternalWidth - 170, 8, 162, 40);
+        sb.Draw(_s.PixelWhite, hpHud, new Color(10, 10, 18) * 0.78f);
+        _s.UiFont.Draw(sb, $"HP: {_s.Player.Hp}/{_s.Player.MaxHp}", new Vector2(hpHud.X + 8, hpHud.Y + 8), Color.White * 0.95f, 1);
+        _s.UiFont.Draw(sb, $"XP: {_s.Player.TotalXp}", new Vector2(hpHud.X + 8, hpHud.Y + 18), Color.White * 0.80f, 1);
+
+        if (targetInfo.HasTarget)
+        {
+            var promptRect = new Rectangle(8, PixelRenderer.InternalHeight - 112, 360, 24);
+            sb.Draw(_s.PixelWhite, promptRect, new Color(10, 10, 18) * 0.86f);
+
+            var promptColor = targetInfo.IsAttackPrompt ? Color.OrangeRed * 0.95f : Color.Gold * 0.95f;
+            _s.UiFont.Draw(sb, targetInfo.Prompt, new Vector2(promptRect.X + 8, promptRect.Y + 8), promptColor, 1);
+
+            var nameRect = new Rectangle(promptRect.X, promptRect.Bottom + 2, 240, 20);
+            sb.Draw(_s.PixelWhite, nameRect, new Color(10, 10, 18) * 0.72f);
+            _s.UiFont.Draw(sb, $"Target: {targetInfo.Label}", new Vector2(nameRect.X + 8, nameRect.Y + 6), Color.White * 0.88f, 1);
         }
 
+        var logArea = new Rectangle(8, PixelRenderer.InternalHeight - 86, PixelRenderer.InternalWidth - 16, 78);
+        _messageLog.Draw(sb, _s.PixelWhite, _s.UiFont, logArea, scale: 1);
+
+        if (_showInventory)
+            DrawInventoryOverlay(sb);
+
         sb.End();
+    }
+
+    private void DrawInventoryOverlay(SpriteBatch sb)
+    {
+        var stacks = _s.Player.Inventory.GetAllStacks(_s.Items);
+
+        var panel = new Rectangle(PixelRenderer.InternalWidth - 238, 54, 230, 212);
+        sb.Draw(_s.PixelWhite, panel, new Color(10, 10, 18) * 0.92f);
+
+        _s.UiFont.Draw(sb, "INVENTORY", new Vector2(panel.X + 8, panel.Y + 8), Color.Gold * 0.95f, 1);
+
+        if (stacks.Count == 0)
+        {
+            _s.UiFont.Draw(sb, "Inventory is empty.", new Vector2(panel.X + 8, panel.Y + 28), Color.White * 0.75f, 1);
+            return;
+        }
+
+        int rowH = _s.UiFont.LineHeight(1);
+        int visibleRows = Math.Max(1, (panel.Height - 34) / rowH);
+        int maxScroll = Math.Max(0, stacks.Count - visibleRows);
+        _inventoryScroll = Math.Clamp(_inventoryScroll, 0, maxScroll);
+
+        int y = panel.Y + 28;
+        for (int i = 0; i < visibleRows; i++)
+        {
+            int idx = _inventoryScroll + i;
+            if (idx >= stacks.Count)
+                break;
+
+            var stack = stacks[idx];
+            string name = _s.Items.DisplayNameOf(stack.ItemId);
+            var iconRect = new Rectangle(panel.X + 8, y + 1, 16, 16);
+            string iconKey = _s.Items.IconIdOf(stack.ItemId);
+            if (!_s.Sprites.TryDraw(sb, iconKey, iconRect, Color.White * 0.95f))
+                SpriteDb.DrawMissingPlaceholder(sb, _s.PixelWhite, iconRect, Color.Magenta);
+
+            _s.UiFont.Draw(sb, $"{name} x{stack.Quantity}", new Vector2(panel.X + 28, y), Color.White * 0.84f, 1);
+            y += rowH;
+        }
     }
 
     private static bool IsOutOfBounds(Point p, int w, int h)
@@ -343,6 +523,144 @@ public sealed class LocalMapScene : SceneBase
     }
 
     private static bool PortalAllowsExit(LocalMapData local, Dir d) => true;
+
+    // TODO: Terrain Sprite Rendering v1 (disabled, see DrawWorld comment).
+    // private const bool UseAssetTerrainTiles = false;
+    // Terrain sprite rendering would call DrawTerrainSprites(sb, view) when re-enabled,
+    // but source rectangles need proper inspection first.
+
+    private void DrawEntities(SpriteBatch sb, InteractionTargetInfo targetInfo)
+    {
+        if (_map == null) return;
+
+        for (int i = 0; i < _entities.Entities.Count; i++)
+        {
+            var e = _entities.Entities[i];
+            if (!e.IsAlive) continue;
+
+            var tl = _map.CellToWorldTopLeft(e.Tile);
+            var rect = new Rectangle((int)tl.X + 8, (int)tl.Y + 8, 16, 16);
+
+            switch (e.Type)
+            {
+                case GameEntityType.ResourceNode:
+                    rect = new Rectangle((int)tl.X + 9, (int)tl.Y + 9, 14, 14);
+                    break;
+                case GameEntityType.Chest:
+                    rect = new Rectangle((int)tl.X + 7, (int)tl.Y + 11, 18, 12);
+                    break;
+                case GameEntityType.Door:
+                    rect = new Rectangle((int)tl.X + 10, (int)tl.Y + 6, 12, 20);
+                    break;
+                case GameEntityType.Enemy:
+                    rect = new Rectangle((int)tl.X + 8, (int)tl.Y + 8, 16, 16);
+                    break;
+            }
+
+            bool drewSprite = false;
+            if (!string.IsNullOrWhiteSpace(e.SpriteId))
+            {
+                if (_s.Sprites.TryResolve(e.SpriteId, out var sprite))
+                {
+                    sb.Draw(sprite.Texture, rect, sprite.Source, Color.White, 0f, sprite.Origin, SpriteEffects.None, 0f);
+                    drewSprite = true;
+                }
+                else
+                {
+                    LogMissingEntitySprite(e);
+                }
+            }
+
+            // Always draw a visible fallback if sprite failed or was not set.
+            if (!drewSprite)
+            {
+                var fallbackColor = ComputeEntityFallbackColor(e);
+                sb.Draw(_s.PixelWhite, rect, fallbackColor);
+            }
+
+            if (e.Type == GameEntityType.Enemy && IsEnemyAggro(e))
+            {
+                var aggro = new Rectangle(rect.X + (rect.Width / 2) - 2, rect.Y - 8, 4, 4);
+                sb.Draw(_s.PixelWhite, aggro, Color.OrangeRed * 0.95f);
+            }
+
+            if (targetInfo.HighlightEntity != null && targetInfo.HighlightEntity.Id == e.Id)
+            {
+                var focusRect = new Rectangle(rect.X - 1, rect.Y - 1, rect.Width + 2, rect.Height + 2);
+                sb.Draw(_s.PixelWhite, new Rectangle(focusRect.X, focusRect.Y, focusRect.Width, 1), Color.Gold * 0.9f);
+                sb.Draw(_s.PixelWhite, new Rectangle(focusRect.X, focusRect.Bottom - 1, focusRect.Width, 1), Color.Gold * 0.9f);
+                sb.Draw(_s.PixelWhite, new Rectangle(focusRect.X, focusRect.Y, 1, focusRect.Height), Color.Gold * 0.9f);
+                sb.Draw(_s.PixelWhite, new Rectangle(focusRect.Right - 1, focusRect.Y, 1, focusRect.Height), Color.Gold * 0.9f);
+            }
+
+            if (e.Type == GameEntityType.Enemy && e.MaxHp > 0)
+            {
+                int barW = 16;
+                int hpW = (int)MathF.Round(barW * Math.Clamp(e.Hp / (float)e.MaxHp, 0f, 1f));
+                sb.Draw(_s.PixelWhite, new Rectangle(rect.X, rect.Y - 3, barW, 2), Color.Black * 0.8f);
+                sb.Draw(_s.PixelWhite, new Rectangle(rect.X, rect.Y - 3, Math.Max(0, hpW), 2), Color.LimeGreen);
+            }
+        }
+    }
+
+    private void DrawInteractionHighlight(SpriteBatch sb, InteractionTargetInfo targetInfo)
+    {
+        if (!targetInfo.HasTarget || _map == null)
+            return;
+
+        var tl = _map.CellToWorldTopLeft(targetInfo.HighlightTile);
+        var tile = new Rectangle((int)tl.X, (int)tl.Y, _map.TileSize, _map.TileSize);
+
+        var color = targetInfo.IsAttackPrompt ? Color.OrangeRed : Color.Gold;
+        sb.Draw(_s.PixelWhite, tile, color * 0.18f);
+        sb.Draw(_s.PixelWhite, new Rectangle(tile.X, tile.Y, tile.Width, 1), color * 0.95f);
+        sb.Draw(_s.PixelWhite, new Rectangle(tile.X, tile.Bottom - 1, tile.Width, 1), color * 0.95f);
+        sb.Draw(_s.PixelWhite, new Rectangle(tile.X, tile.Y, 1, tile.Height), color * 0.95f);
+        sb.Draw(_s.PixelWhite, new Rectangle(tile.Right - 1, tile.Y, 1, tile.Height), color * 0.95f);
+    }
+
+    private InteractionTargetInfo GetCurrentTargetInfo()
+        => InteractionPromptBuilder.Build(_entities, _playerCell, _facing);
+
+    private bool IsEnemyAggro(GameEntity enemy)
+    {
+        if (enemy.Type != GameEntityType.Enemy || !enemy.IsAlive)
+            return false;
+
+        int dist = Math.Abs(enemy.Tile.X - _playerCell.X) + Math.Abs(enemy.Tile.Y - _playerCell.Y);
+        return dist <= _enemyAi.AggroRange;
+    }
+
+    private void Log(string message)
+    {
+        _messageLog.Add(message);
+        _s.Toasts.Push(message, 0.9f);
+    }
+
+    private void LogMissingEntitySprite(GameEntity entity)
+    {
+        if (string.IsNullOrWhiteSpace(entity.SpriteId))
+            return;
+
+        if (!_missingEntitySpriteLogged.Add(entity.SpriteId))
+            return;
+
+        var message = $"[Assets] entity sprite missing: {entity.DisplayName} | {entity.Type} | {entity.SpriteId}";
+        Debug.WriteLine(message);
+        Console.WriteLine(message);
+    }
+
+    private static Color ComputeEntityFallbackColor(GameEntity entity)
+    {
+        return entity.Type switch
+        {
+            GameEntityType.ResourceNode => new Color(160, 220, 100), // greenish
+            GameEntityType.Chest => new Color(180, 140, 80),         // brownish gold
+            GameEntityType.Enemy => new Color(220, 80, 100),         // reddish
+            GameEntityType.Door => new Color(140, 140, 160),         // grayish
+            _ => new Color(120, 100, 80),                             // dark brown
+        };
+    }
 
     private bool Pressed(KeyboardState ks, Keys k) => ks.IsKeyDown(k) && !_prevKs.IsKeyDown(k);
     private bool Pressed(GamePadState pad, Buttons b) => pad.IsButtonDown(b) && !_prevPad.IsButtonDown(b);
@@ -448,9 +766,9 @@ public sealed class LocalMapScene : SceneBase
             }
 
             for (int y = 0; y < n; y++)
-            for (int x = 0; x < n; x++)
-                if (Ok(x, y, requireRoad))
-                    return new Point(x, y);
+                for (int x = 0; x < n; x++)
+                    if (Ok(x, y, requireRoad))
+                        return new Point(x, y);
 
             return null;
         }
@@ -551,9 +869,9 @@ public sealed class LocalMapScene : SceneBase
         }
 
         for (int y = 1; y < n - 1; y++)
-        for (int x = 1; x < n - 1; x++)
-            if (!map.IsSolidCell(x, y))
-                return new Point(x, y);
+            for (int x = 1; x < n - 1; x++)
+                if (!map.IsSolidCell(x, y))
+                    return new Point(x, y);
 
         return center;
 

@@ -1,0 +1,157 @@
+{
+    "sprites": [
+        {
+            "key": "entity.resource.berry_bush",
+            "path": "Sprites/World/tree_32x48.png",
+            "notes": "temporary berry bush proxy"
+        },
+        {
+            "key": "entity.resource.wood_pile",
+            "path": "Sprites/World/rock_32x32.png",
+            "notes": "temporary wood pile proxy"
+        },
+        {
+            "key": "entity.resource.stone_pile",
+            "path": "Sprites/World/rock_32x32.png",
+            "notes": "temporary stone pile proxy"
+        },
+        {
+            "key": "entity.container.old_chest",
+            "path": "Sprites/World/rock_32x32.png",
+            "notes": "temporary chest proxy"
+        },
+        {
+            "key": "entity.enemy.slime",
+            "path": "Sprites/World/player_16x16.png",
+            "frameWidth": 16,
+            "frameHeight": 16,
+            "frameCount": 1,
+            "notes": "temporary slime proxy"
+        },
+        {
+            "key": "entity.structure.gate",
+            "path": "Sprites/World/ruin_pillar_32x48.png",
+            "notes": "gate marker"
+        },
+        {
+            "key": "entity.prop.tree",
+            "path": "Sprites/World/tree_32x48.png"
+        },
+        {
+            "key": "entity.prop.rock",
+            "path": "Sprites/World/rock_32x32.png"
+        },
+        {
+            "key": "actor.player.idle.down",
+            "path": "Sprites/World/player_16x16.png",
+            "frameWidth": 16,
+            "frameHeight": 16,
+            "frameCount": 1,
+            "originX": 8,
+            "originY": 15
+        },
+        {
+            "key": "actor.player.idle.up",
+            "path": "Sprites/World/player_16x16.png",
+            "frameWidth": 16,
+            "frameHeight": 16,
+            "frameCount": 1,
+            "originX": 8,
+            "originY": 15
+        },
+        {
+            "key": "actor.player.idle.side",
+            "path": "Sprites/World/player_16x16.png",
+            "frameWidth": 16,
+            "frameHeight": 16,
+            "frameCount": 1,
+            "originX": 8,
+            "originY": 15
+        },
+        {
+            "key": "actor.player.walk.down",
+            "path": "Sprites/World/player_16x16.png",
+            "frameWidth": 16,
+            "frameHeight": 16,
+            "frameCount": 1,
+            "originX": 8,
+            "originY": 15
+        },
+        {
+            "key": "actor.player.walk.up",
+            "path": "Sprites/World/player_16x16.png",
+            "frameWidth": 16,
+            "frameHeight": 16,
+            "frameCount": 1,
+            "originX": 8,
+            "originY": 15
+        },
+        {
+            "key": "actor.player.walk.side",
+            "path": "Sprites/World/player_16x16.png",
+            "frameWidth": 16,
+            "frameHeight": 16,
+            "frameCount": 1,
+            "originX": 8,
+            "originY": 15
+        },
+        {
+            "key": "item.berries",
+            "path": "Sprites/World/tree_32x48.png",
+            "notes": "temporary item icon"
+        },
+        {
+            "key": "item.wood",
+            "path": "Sprites/World/rock_32x32.png",
+            "notes": "temporary item icon"
+        },
+        {
+            "key": "item.stone",
+            "path": "Sprites/World/rock_32x32.png",
+            "notes": "temporary item icon"
+        },
+        {
+            "key": "item.old_coin",
+            "path": "Sprites/World/rock_32x32.png",
+            "notes": "temporary item icon"
+        },
+        {
+            "key": "item.slime_gel",
+            "path": "Sprites/World/player_16x16.png",
+            "frameWidth": 16,
+            "frameHeight": 16,
+            "frameCount": 1,
+            "notes": "temporary item icon"
+        },
+        {
+            "key": "item.health_herb",
+            "path": "Sprites/World/tree_32x48.png",
+            "notes": "temporary item icon"
+        },
+        {
+            "key": "tile.grass",
+            "path": "Textures/tiles.png",
+            "notes": "tile atlas placeholder"
+        },
+        {
+            "key": "tile.water",
+            "path": "Textures/tiles.png",
+            "notes": "tile atlas placeholder"
+        },
+        {
+            "key": "tile.dirt",
+            "path": "Textures/tiles.png",
+            "notes": "tile atlas placeholder"
+        },
+        {
+            "key": "tile.stone_ground",
+            "path": "Textures/tiles.png",
+            "notes": "tile atlas placeholder"
+        },
+        {
+            "key": "tile.wall",
+            "path": "Textures/tiles.png",
+            "notes": "tile atlas placeholder"
+        }
+    ]
+}

@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using BeginnersLuck.Engine.Graphics;
 using BeginnersLuck.Engine.Input;
 using BeginnersLuck.Engine.Rendering;
 using BeginnersLuck.Engine.UI;
 using BeginnersLuck.Engine.Update;
+using BeginnersLuck.Game.Graphics;
 using BeginnersLuck.Game.Services;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -19,6 +21,7 @@ public sealed class InventoryScene : PanelSceneBase
 
     private int _focusIndex;
     private int _scroll;
+    private readonly HashSet<string> _missingIconLogged = new(StringComparer.OrdinalIgnoreCase);
 
     // Cached view of inventory (rebuild when changes)
     private readonly List<(string ItemId, int Qty)> _items = new();
@@ -170,6 +173,8 @@ public sealed class InventoryScene : PanelSceneBase
             bool canUse = S.ItemUse.CanUse(id, out var reason);
 
             var r = new Rectangle(_listRect.X + 8, y - 2, _listRect.Width - 16, rowH);
+            var iconRect = new Rectangle(r.X + 8, r.Y + 4, 16, 16);
+            string iconKey = S.Items.IconIdOf(id);
 
             var fill = focused ? new Color(70, 70, 120) : new Color(40, 40, 70);
             if (!canUse) fill = new Color(25, 25, 35);
@@ -187,11 +192,13 @@ public sealed class InventoryScene : PanelSceneBase
             var qtyColor = canUse ? Color.White * 0.75f : Color.White * 0.35f;
 
             int rightW = S.UiFont.Measure(right, 1).X;
-            int maxNameW = r.Width - 18 - rightW;
+            int maxNameW = r.Width - 38 - rightW;
 
             name = S.UiFont.TrimToWidth(name, maxNameW, 1);
 
-            S.UiFont.Draw(sb, name, new Vector2(r.X + 10, r.Y + 6), nameColor, 1);
+            DrawInventoryIcon(sb, id, name, iconKey, iconRect, canUse ? 0.95f : 0.45f);
+
+            S.UiFont.Draw(sb, name, new Vector2(r.X + 30, r.Y + 6), nameColor, 1);
             S.UiFont.Draw(sb, right, new Vector2(r.Right - 10 - rightW, r.Y + 6), qtyColor, 1);
 
             // Focused unusable reason tag
@@ -222,6 +229,11 @@ public sealed class InventoryScene : PanelSceneBase
         string name = S.Items.NameOf(id).ToUpperInvariant();
         S.UiFont.Draw(sb, name, new Vector2(x, y), Color.White * 0.95f, 1);
         y += S.UiFont.LineHeight(1) + 8;
+
+        var iconRect = new Rectangle(_detailsRect.X + 12, y, 24, 24);
+        string iconKey = S.Items.IconIdOf(id);
+        DrawInventoryIcon(sb, id, name, iconKey, iconRect, 0.95f);
+        y += 32;
 
         // Preview / effect
         string preview = S.Items.UsePreviewOf(id);
@@ -262,6 +274,22 @@ public sealed class InventoryScene : PanelSceneBase
                 yield return candidate.TrimEnd();
                 text = text[candidate.Length..].TrimStart();
             }
+        }
+    }
+
+    private void DrawInventoryIcon(SpriteBatch sb, string itemId, string displayName, string iconKey, Rectangle iconRect, float alpha)
+    {
+        if (string.IsNullOrWhiteSpace(iconKey))
+            return;
+
+        if (S.Sprites.TryDraw(sb, iconKey, iconRect, Color.White * alpha))
+            return;
+
+        if (_missingIconLogged.Add(itemId))
+        {
+            var message = $"[Assets] inventory icon missing: {itemId} | {displayName} | {iconKey}";
+            Debug.WriteLine(message);
+            Console.WriteLine(message);
         }
     }
 }

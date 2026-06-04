@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "monsters": [
+    {
+      "id": "goblin",
+      "name": "Goblin",
+      "spriteKey": "battle.goblin",
+      "lootTableId": "",
+      "skills": ["atk_basic"],
+      "stats": {
+        "maxHp": 12,
+        "maxMp": 0,
+        "atk": 5,
+        "def": 2,
+        "spd": 4
+      }
+    },
+    {
+      "id": "slime",
+      "name": "Slime",
+      "spriteKey": "battle.slime",
+      "lootTableId": "",
+      "skills": ["atk_basic"],
+      "stats": {
+        "maxHp": 10,
+        "maxMp": 0,
+        "atk": 3,
+        "def": 1,
+        "spd": 2
+      }
+    }
+  ]
+}

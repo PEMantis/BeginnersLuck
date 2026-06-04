@@ -1,0 +1,200 @@
+{
+  "sprites": [
+    {
+      "key": "item.berries",
+      "path": "Art/Packs/ItemIcons/Curated/berries.png",
+      "width": 16,
+      "height": 16,
+      "scale": 2
+    },
+    {
+      "key": "item.wood",
+      "path": "Art/Packs/ItemIcons/Curated/wood.png",
+      "width": 16,
+      "height": 16,
+      "scale": 2
+    },
+    {
+      "key": "item.stone",
+      "path": "Art/Packs/ItemIcons/Curated/stone.png",
+      "width": 16,
+      "height": 16,
+      "scale": 2
+    },
+    {
+      "key": "item.old_coin",
+      "path": "Art/Packs/ItemIcons/Curated/old_coin.png",
+      "width": 16,
+      "height": 16,
+      "scale": 2
+    },
+    {
+      "key": "item.slime_gel",
+      "path": "Art/Packs/ItemIcons/Curated/slime_gel.png",
+      "width": 16,
+      "height": 16,
+      "scale": 2
+    },
+    {
+      "key": "item.health_herb",
+      "path": "Art/Packs/ItemIcons/Curated/health_herb.png",
+      "width": 16,
+      "height": 16,
+      "scale": 2
+    },
+    {
+      "key": "entity.resource.berry_bush",
+      "path": "Art/Packs/CainosTopDownBasic/TX Plant.png",
+      "x": 0,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1
+    },
+    {
+      "key": "entity.resource.wood_pile",
+      "path": "Art/Packs/CainosTopDownBasic/TX Props.png",
+      "x": 0,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1
+    },
+    {
+      "key": "entity.resource.stone_pile",
+      "path": "Art/Packs/CainosTopDownBasic/TX Props.png",
+      "x": 32,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1
+    },
+    {
+      "key": "entity.container.old_chest",
+      "path": "Art/Packs/CainosTopDownBasic/TX Props.png",
+      "x": 64,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1
+    },
+    {
+      "key": "entity.enemy.slime",
+      "path": "Art/Packs/CainosTopDownBasic/TX Props.png",
+      "x": 96,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1
+    },
+    {
+      "key": "entity.structure.gate",
+      "path": "Art/Packs/CainosTopDownBasic/TX Struct.png",
+      "x": 0,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1
+    },
+    {
+      "key": "entity.prop.tree",
+      "path": "Art/Packs/CainosTopDownBasic/TX Plant.png",
+      "x": 32,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1
+    },
+    {
+      "key": "entity.prop.rock",
+      "path": "Art/Packs/CainosTopDownBasic/TX Props.png",
+      "x": 32,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1
+    },
+    {
+      "key": "world.tree",
+      "path": "Art/Packs/CainosTopDownBasic/TX Plant.png",
+      "x": 32,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1
+    },
+    {
+      "key": "world.rock",
+      "path": "Art/Packs/CainosTopDownBasic/TX Props.png",
+      "x": 32,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1
+    },
+    {
+      "key": "tile.grass",
+      "path": "Art/Packs/CainosTopDownBasic/TX Tileset Grass.png",
+      "x": 0,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1
+    },
+    {
+      "key": "tile.water",
+      "path": "Art/Packs/CainosTopDownBasic/TX Tileset Grass.png",
+      "x": 96,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1,
+      "notes": "No dedicated water sheet in starter pack; using visible grass-sheet region for minimal integration"
+    },
+    {
+      "key": "tile.dirt",
+      "path": "Art/Packs/CainosTopDownBasic/TX Tileset Stone Ground.png",
+      "x": 0,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1
+    },
+    {
+      "key": "tile.stone_ground",
+      "path": "Art/Packs/CainosTopDownBasic/TX Tileset Stone Ground.png",
+      "x": 32,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1
+    },
+    {
+      "key": "tile.wall",
+      "path": "Art/Packs/CainosTopDownBasic/TX Tileset Wall.png",
+      "x": 0,
+      "y": 0,
+      "width": 32,
+      "height": 32,
+      "scale": 1
+    },
+    {
+      "key": "actor.player.idle.down",
+      "path": "Art/Packs/PixelCrawlerFree/Body_A/Idle_Down-Sheet.png",
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frameCount": 4,
+      "frameDuration": 0.15,
+      "scale": 1
+    },
+    {
+      "key": "actor.player.walk.down",
+      "path": "Art/Packs/PixelCrawlerFree/Body_A/Walk_Down-Sheet.png",
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frameCount": 6,
+      "frameDuration": 0.12,
+      "scale": 1
+    }
+  ]
+}

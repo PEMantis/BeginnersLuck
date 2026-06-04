@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "id": "fighter",
+      "name": "Fighter",
+      "baseStats": { "maxHp": 30, "maxMp": 0, "atk": 6, "def": 4, "spd": 3 },
+      "growthPerLevel": { "maxHp": 5, "maxMp": 0, "atk": 2, "def": 1, "spd": 1 },
+      "startingSkills": ["atk_basic"]
+    }
+  ]
+}

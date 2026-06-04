@@ -36,6 +36,12 @@ public sealed class InventoryPage : ListDetailsPageBase
         right = $"x{qty}";
     }
 
+    protected override string? GetRowIconKey(GameServices s, int index)
+    {
+        var (id, _) = _items[index];
+        return s.Items.IconIdOf(id);
+    }
+
     protected override bool IsRowEnabled(GameServices s, int index, out string reason)
     {
         var (id, qty) = _items[index];

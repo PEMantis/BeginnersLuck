@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BeginnersLuck.Engine.Input;
 using BeginnersLuck.Engine.UI;
 using BeginnersLuck.Engine.Update;
+using BeginnersLuck.Game.Graphics;
 using BeginnersLuck.Game.Services;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -221,11 +222,22 @@ public abstract class ListDetailsPageBase : IMenuPage
             if (focused && !enabled && !string.IsNullOrWhiteSpace(reason))
                 rightColor = Color.White * 0.25f;
 
+            var iconKey = GetRowIconKey(s, idx);
+            int leftX = r.X + 10;
+            if (!string.IsNullOrWhiteSpace(iconKey))
+            {
+                var iconRect = new Rectangle(r.X + 8, r.Y + 4, 16, 16);
+                if (!s.Sprites.TryDraw(sb, iconKey, iconRect, Color.White * (enabled ? 0.95f : 0.45f)))
+                    SpriteDb.DrawMissingPlaceholder(sb, white, iconRect, Color.Magenta);
+
+                leftX += 20;
+            }
+
             int rightW = s.UiFont.Measure(rightText, 1).X;
-            int maxLeftW = r.Width - 18 - rightW;
+            int maxLeftW = r.Width - (leftX - r.X) - 8 - rightW;
             leftText = s.UiFont.TrimToWidth(leftText, maxLeftW, 1);
 
-            s.UiFont.Draw(sb, leftText, new Vector2(r.X + 10, r.Y + 6), leftColor, 1);
+            s.UiFont.Draw(sb, leftText, new Vector2(leftX, r.Y + 6), leftColor, 1);
             s.UiFont.Draw(sb, rightText, new Vector2(r.Right - 10 - rightW, r.Y + 6), rightColor, 1);
 
             y += rowH;
@@ -331,6 +343,9 @@ public abstract class ListDetailsPageBase : IMenuPage
 
     /// <summary>Return row left/right text.</summary>
     protected abstract void GetRow(GameServices s, int index, out string left, out string right);
+
+    /// <summary>Optional icon asset key to render at the row start.</summary>
+    protected virtual string? GetRowIconKey(GameServices s, int index) => null;
 
     /// <summary>Return details: title, preview, body, footerLine.</summary>
     protected abstract void GetDetails(GameServices s, int index, out string title, out string preview, out string body, out string footerLine);

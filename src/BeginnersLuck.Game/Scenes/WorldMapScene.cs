@@ -8,6 +8,8 @@ using BeginnersLuck.Engine.Scenes;
 using BeginnersLuck.Engine.UI;
 using BeginnersLuck.Engine.Update;
 using BeginnersLuck.Engine.World;
+using BeginnersLuck.Game.Assets;
+using BeginnersLuck.Game.Graphics;
 using BeginnersLuck.Game.Encounters;
 using BeginnersLuck.Game.Services;
 using BeginnersLuck.Game.State;
@@ -541,15 +543,20 @@ public sealed class WorldMapScene : SceneBase
 
         var tl = _map.CellToWorldTopLeft(_playerCell);
 
-        if (_s.Sprites.TryGet("world.player", out var tex, out var origin))
+        var pos = new Vector2(tl.X + 16, tl.Y + 32); // bottom-center of 32x32 tile
+        if (_s.Sprites.TryResolve(AssetKeys.Actor.Player.IdleDown, out var sprite))
         {
-            var pos = new Vector2(tl.X + 16, tl.Y + 32); // bottom-center of 32x32 tile
-            sb.Draw(tex, pos, null, Color.White, 0f, origin, 1f, SpriteEffects.None, 0f);
+            sb.Draw(sprite.Texture, pos, sprite.Source, Color.White, 0f, sprite.Origin, sprite.Scale, SpriteEffects.None, 0f);
+            return;
         }
-        else
+
+        if (_s.Sprites.TryResolve(AssetKeys.Actor.Player.WalkDown, out sprite))
         {
-            sb.Draw(_white!, new Rectangle((int)tl.X + 2, (int)tl.Y + 2, 12, 12), Color.Gold);
+            sb.Draw(sprite.Texture, pos, sprite.Source, Color.White, 0f, sprite.Origin, sprite.Scale, SpriteEffects.None, 0f);
+            return;
         }
+
+        sb.Draw(_white!, new Rectangle((int)tl.X + 2, (int)tl.Y + 2, 12, 12), Color.Gold);
     }
 
     private void DrawWorldProps(SpriteBatch sb, Rectangle viewWorldRect)
@@ -590,15 +597,32 @@ public sealed class WorldMapScene : SceneBase
                     if (p.Tile.X < minTx || p.Tile.X > maxTx || p.Tile.Y < minTy || p.Tile.Y > maxTy)
                         continue;
 
-                    if (!_s.Sprites.TryGet(p.SpriteId, out var tex, out var origin))
-                        continue;
-
                     var tl = _map.CellToWorldTopLeft(p.Tile);
+                    var rect = new Rectangle((int)tl.X + 8, (int)tl.Y + 8, 16, 16);
 
-                    // sit on ground: bottom-center of tile
-                    var pos = new Vector2(tl.X + 16, tl.Y + 32) + Jitter(p.Tile);
+                    bool drewSprite = false;
+                    if (!string.IsNullOrWhiteSpace(p.SpriteId))
+                    {
+                        if (_s.Sprites.TryResolve(p.SpriteId, out var sprite))
+                        {
+                            // sit on ground: bottom-center of tile
+                            var pos = new Vector2(tl.X + 16, tl.Y + 32) + Jitter(p.Tile);
+                            sb.Draw(sprite.Texture, pos, sprite.Source, Color.White, 0f, sprite.Origin, sprite.Scale, SpriteEffects.None, 0f);
+                            drewSprite = true;
+                        }
+                    }
 
-                    sb.Draw(tex, pos, null, Color.White, 0f, origin, 1f, SpriteEffects.None, 0f);
+                    // Always draw visible fallback if sprite failed or was not set.
+                    if (!drewSprite)
+                    {
+                        var fallbackColor = p.SpriteId switch
+                        {
+                            var s when string.Equals(s, AssetKeys.Entities.Tree, StringComparison.OrdinalIgnoreCase) => new Color(64, 170, 78),    // tree green
+                            var s when string.Equals(s, AssetKeys.Entities.Rock, StringComparison.OrdinalIgnoreCase) => new Color(130, 130, 138), // rock gray
+                            _ => p.BlocksMove ? new Color(196, 88, 66) : new Color(188, 168, 84), // blocking red or non-blocking beige
+                        };
+                        sb.Draw(_white!, rect, fallbackColor);
+                    }
                 }
             }
     }
@@ -758,8 +782,8 @@ public sealed class WorldMapScene : SceneBase
                     case ZoneId.Forest:
                         {
                             int r = rng.Next(100);
-                            if (r < 18) { sprite = "world.tree"; blocks = true; }
-                            else if (r < 23) { sprite = "world.rock"; blocks = false; }
+                            if (r < 18) { sprite = AssetKeys.Entities.Tree; blocks = true; }
+                            else if (r < 23) { sprite = AssetKeys.Entities.Rock; blocks = false; }
                             break;
                         }
 
@@ -767,8 +791,8 @@ public sealed class WorldMapScene : SceneBase
                     case ZoneId.Plains:
                         {
                             int r = rng.Next(100);
-                            if (r < 5) { sprite = "world.tree"; blocks = true; }
-                            else if (r < 8) { sprite = "world.rock"; blocks = false; }
+                            if (r < 5) { sprite = AssetKeys.Entities.Tree; blocks = true; }
+                            else if (r < 8) { sprite = AssetKeys.Entities.Rock; blocks = false; }
                             break;
                         }
 
@@ -776,7 +800,7 @@ public sealed class WorldMapScene : SceneBase
                         {
                             int r = rng.Next(100);
                             if (r < 14) { sprite = "world.mountain"; blocks = true; }
-                            else if (r < 22) { sprite = "world.rock"; blocks = true; }
+                            else if (r < 22) { sprite = AssetKeys.Entities.Rock; blocks = true; }
                             break;
                         }
 
@@ -784,7 +808,7 @@ public sealed class WorldMapScene : SceneBase
                         {
                             int r = rng.Next(100);
                             if (r < 10) { sprite = "world.ruin_pillar"; blocks = true; }
-                            else if (r < 14) { sprite = "world.rock"; blocks = false; }
+                            else if (r < 14) { sprite = AssetKeys.Entities.Rock; blocks = false; }
                             break;
                         }
 

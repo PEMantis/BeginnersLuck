@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BeginnersLuck.WorldGen")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4b442f6199c83853826fc013112269738f50904b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+02fbbf94c7717f3cbfb0653cbc90468b8564f112")]
 [assembly: System.Reflection.AssemblyProductAttribute("BeginnersLuck.WorldGen")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BeginnersLuck.WorldGen")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

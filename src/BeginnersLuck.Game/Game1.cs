@@ -8,6 +8,7 @@ using BeginnersLuck.Engine.Input;
 using BeginnersLuck.Engine.Update;
 using BeginnersLuck.Engine.Content;
 using BeginnersLuck.Engine.UI;
+using BeginnersLuck.Game.Assets;
 using BeginnersLuck.Game.Services;
 using BeginnersLuck.Game.Encounters;
 using System;
@@ -72,7 +73,8 @@ public class Game1 : Microsoft.Xna.Framework.Game
     protected override void LoadContent()
     {
         _raw = new RawContent(GraphicsDevice);
-       var ttf = _raw.LoadBytes("Fonts/ui.ttf");
+        var artRaw = new RawContent(GraphicsDevice, "Content");
+        var ttf = _raw.LoadBytes("Fonts/ui.ttf");
 
         // Title: still big, but controlled
         var titleFont = new RuntimeTtfFont(GraphicsDevice, ttf, pixelHeight: 10);
@@ -108,12 +110,20 @@ public class Game1 : Microsoft.Xna.Framework.Game
         px.SetData(new[] { Color.White });
 
         var toasts = new BeginnersLuck.Game.UI.ToastQueue();
-        var sprites = new BeginnersLuck.Game.Graphics.SpriteDb(_raw);
-        sprites.Register("world.rock", "Sprites/World/rock_32x32.png");
-        sprites.Register("world.tree", "Sprites/World/tree_32x48.png");
+        var sprites = new BeginnersLuck.Game.Graphics.SpriteDb(artRaw, _raw);
+        // Cainos source rectangles are intentionally approximate for the starter pass.
+        sprites.Register(AssetKeys.Entities.Rock, "Art/Packs/CainosTopDownBasic/TX Props.png");
+        sprites.Register(AssetKeys.Entities.Tree, "Art/Packs/CainosTopDownBasic/TX Plant.png");
         sprites.Register("world.mountain", "Sprites/World/mountain_64x64.png");
         sprites.Register("world.ruin_pillar", "Sprites/World/ruin_pillar_32x48.png");
-        sprites.Register("world.player", "Sprites/World/player_16x16.png");
+        sprites.Register(AssetKeys.Actor.Player.IdleDown, "Art/Packs/PixelCrawlerFree/Body_A/Idle_Down-Sheet.png");
+        sprites.Register(AssetKeys.Actor.Player.WalkDown, "Art/Packs/PixelCrawlerFree/Body_A/Walk_Down-Sheet.png");
+        sprites.Register(AssetKeys.Entities.BerryBush, "Art/Packs/CainosTopDownBasic/TX Plant.png");
+        sprites.Register(AssetKeys.Entities.WoodPile, "Art/Packs/CainosTopDownBasic/TX Props.png");
+        sprites.Register(AssetKeys.Entities.StonePile, "Art/Packs/CainosTopDownBasic/TX Props.png");
+        sprites.Register(AssetKeys.Entities.OldChest, "Art/Packs/CainosTopDownBasic/TX Props.png");
+        sprites.Register(AssetKeys.Entities.Slime, "Art/Packs/CainosTopDownBasic/TX Props.png");
+        sprites.Register(AssetKeys.Entities.Gate, "Art/Packs/CainosTopDownBasic/TX Struct.png");
         // Roads (32x32 overlay sprites)
         sprites.Register("world.road.dot", "Sprites/World/Road/road_dot_32x32.png");
         sprites.Register("world.road.end_n", "Sprites/World/Road/road_end_n_32x32.png");
@@ -131,6 +141,36 @@ public class Game1 : Microsoft.Xna.Framework.Game
         sprites.Register("world.road.t_s", "Sprites/World/Road/road_t_s_32x32.png");
         sprites.Register("world.road.t_w", "Sprites/World/Road/road_t_w_32x32.png");
         sprites.Register("world.road.cross", "Sprites/World/Road/road_cross_32x32.png");
+
+        sprites.LoadManifest("Art/Manifests/asset-manifest.json");
+        sprites.LogStartupDiagnostics(
+            new[]
+            {
+                AssetKeys.Items.Berries,
+                AssetKeys.Items.Wood,
+                AssetKeys.Items.Stone,
+                AssetKeys.Items.OldCoin,
+                AssetKeys.Items.SlimeGel,
+                AssetKeys.Items.HealthHerb,
+            },
+            new[]
+            {
+                AssetKeys.Entities.BerryBush,
+                AssetKeys.Entities.WoodPile,
+                AssetKeys.Entities.StonePile,
+                AssetKeys.Entities.OldChest,
+                AssetKeys.Entities.Slime,
+                AssetKeys.Entities.Gate,
+                AssetKeys.Entities.Tree,
+                AssetKeys.Entities.Rock,
+                AssetKeys.Tiles.Grass,
+                AssetKeys.Tiles.Water,
+                AssetKeys.Tiles.Dirt,
+                AssetKeys.Tiles.StoneGround,
+                AssetKeys.Tiles.Wall,
+                "world.tree",
+                "world.rock",
+            });
 
         // your existing: rng, encounterDirector, player, itemDb, raw, font
         _services = new BeginnersLuck.Game.Services.GameServices(
@@ -179,8 +219,16 @@ public class Game1 : Microsoft.Xna.Framework.Game
         if (uc.Actions.System.Quit.Pressed)
             Exit();
 
+        if (uc.Input.Pressed(Keys.F9))
+        {
+            _services.Sprites.DumpStatus();
+            _services.Toasts.Push("Asset registry status dumped.", 1.0f);
+        }
+
         _fade.Update(gameTime);
         _scenes.Update(uc);
+
+        _services.Toasts.Update(dt);
 
         base.Update(gameTime);
     }
@@ -201,6 +249,11 @@ public class Game1 : Microsoft.Xna.Framework.Game
         var rc = new BeginnersLuck.Engine.Rendering.RenderContext(gameTime, _pixel, _pixel.SpriteBatch);
 
         _scenes.Current?.Draw(rc);
+
+        var sb = _pixel.SpriteBatch;
+        sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.AlphaBlend);
+        _services.Toasts.Draw(sb, _services.PixelWhite, _services.UiFont, PixelRenderer.InternalWidth, PixelRenderer.InternalHeight);
+        sb.End();
 
         // Transition overlays scene + UI
         _fade.Draw(rc);

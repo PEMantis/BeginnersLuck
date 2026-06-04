@@ -37,4 +37,7 @@ public sealed class RawContent
         return System.IO.File.ReadAllBytes(full);
     }
 
+    public bool Exists(string relativePath)
+        => File.Exists(Path.Combine(_rootAbs, relativePath.Replace('\\', '/')));
+
 }

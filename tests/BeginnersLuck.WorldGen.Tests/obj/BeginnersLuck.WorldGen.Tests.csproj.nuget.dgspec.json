@@ -4,6 +4,177 @@
     "/home/perry-davis/dev/BeginnersLuck/tests/BeginnersLuck.WorldGen.Tests/BeginnersLuck.WorldGen.Tests.csproj": {}
   },
   "projects": {
+    "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.Engine/BeginnersLuck.Engine.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.Engine/BeginnersLuck.Engine.csproj",
+        "projectName": "BeginnersLuck.Engine",
+        "projectPath": "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.Engine/BeginnersLuck.Engine.csproj",
+        "packagesPath": "/home/perry-davis/.nuget/packages/",
+        "outputPath": "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.Engine/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/home/perry-davis/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "/home/perry-davis/.dotnet/library-packs": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj": {
+                "projectPath": "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.200"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "MonoGame.Framework.DesktopGL": {
+              "target": "Package",
+              "version": "[3.8.4.1, )"
+            },
+            "StbTrueTypeSharp": {
+              "target": "Package",
+              "version": "[1.26.12, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.15, 9.0.15]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.15, 9.0.15]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/home/perry-davis/.dotnet/sdk/10.0.203/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.Game/BeginnersLuck.Game.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.Game/BeginnersLuck.Game.csproj",
+        "projectName": "BeginnersLuck.Game",
+        "projectPath": "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.Game/BeginnersLuck.Game.csproj",
+        "packagesPath": "/home/perry-davis/.nuget/packages/",
+        "outputPath": "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.Game/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/home/perry-davis/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "/home/perry-davis/.dotnet/library-packs": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.Engine/BeginnersLuck.Engine.csproj": {
+                "projectPath": "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.Engine/BeginnersLuck.Engine.csproj"
+              },
+              "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj": {
+                "projectPath": "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.200"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "MonoGame.Framework.DesktopGL": {
+              "target": "Package",
+              "version": "[3.8.4.1, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.15, 9.0.15]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Host.linux-x64",
+              "version": "[9.0.15, 9.0.15]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.15, 9.0.15]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/home/perry-davis/.dotnet/sdk/10.0.203/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
     "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj": {
       "version": "1.0.0",
       "restore": {
@@ -97,6 +268,9 @@
           "net9.0": {
             "targetAlias": "net9.0",
             "projectReferences": {
+              "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.Game/BeginnersLuck.Game.csproj": {
+                "projectPath": "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.Game/BeginnersLuck.Game.csproj"
+              },
               "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj": {
                 "projectPath": "/home/perry-davis/dev/BeginnersLuck/src/BeginnersLuck.WorldGen/BeginnersLuck.WorldGen.csproj"
               }
